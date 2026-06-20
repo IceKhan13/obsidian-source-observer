@@ -8,6 +8,12 @@ import { getChangedFiles, getFileDiff, renderDiff, ChangedFile } from './gitDiff
 
 export const VIEW_TYPE = 'source-observer';
 
+interface ElectronRemote {
+	dialog: {
+		showOpenDialog(opts: Record<string, unknown>): Promise<{ canceled: boolean; filePaths: string[] }>;
+	};
+}
+
 export class SourceObserverView extends ItemView {
 	plugin: SourceObserverPlugin;
 	private fileTree!: FileTree;
@@ -19,7 +25,7 @@ export class SourceObserverView extends ItemView {
 	private repoPath = '';
 	private allChanges: ChangedFile[] = [];
 	private watchers: fs.FSWatcher[] = [];
-	private refreshTimer: ReturnType<typeof setTimeout> | null = null;
+	private refreshTimer: number | null = null;
 
 	constructor(leaf: WorkspaceLeaf, plugin: SourceObserverPlugin) {
 		super(leaf);
@@ -27,7 +33,7 @@ export class SourceObserverView extends ItemView {
 	}
 
 	getViewType() { return VIEW_TYPE; }
-	getDisplayText() { return 'Source Observer'; }
+	getDisplayText() { return 'Source observer'; }
 	getIcon() { return 'code-2'; }
 
 	async onOpen() {
@@ -65,8 +71,8 @@ export class SourceObserverView extends ItemView {
 			},
 		);
 
-		treeSearch.addEventListener('input', () => this.fileTree.search(treeSearch.value));
-		changesSearch.addEventListener('input', () => this.renderChanges(changesSearch.value));
+		treeSearch.addEventListener('input', () => { this.fileTree.search(treeSearch.value); });
+		changesSearch.addEventListener('input', () => { this.renderChanges(changesSearch.value); });
 
 		if (this.plugin.settings.lastOpenedPath) {
 			this.repoPath = this.plugin.settings.lastOpenedPath;
@@ -75,20 +81,19 @@ export class SourceObserverView extends ItemView {
 			this.startWatching();
 		}
 
-		openBtn.addEventListener('click', async () => {
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			const { remote } = (window as any).require('electron') as {
-				remote: { dialog: { showOpenDialog: (opts: Record<string, unknown>) => Promise<{ canceled: boolean; filePaths: string[] }> } };
-			};
-			const result = await remote.dialog.showOpenDialog({ properties: ['openDirectory'] });
-			if (result.canceled || result.filePaths.length === 0) return;
-			const dir = result.filePaths[0] as string;
-			this.repoPath = dir;
-			this.plugin.settings.lastOpenedPath = dir;
-			await this.plugin.saveSettings();
-			await this.fileTree.loadPath(dir);
-			await this.refreshChanges();
-			this.startWatching();
+		openBtn.addEventListener('click', () => {
+			void (async () => {
+				const { remote } = window.require('electron') as { remote: ElectronRemote };
+				const result = await remote.dialog.showOpenDialog({ properties: ['openDirectory'] });
+				const [dir] = result.filePaths;
+				if (result.canceled || !dir) return;
+				this.repoPath = dir;
+				this.plugin.settings.lastOpenedPath = dir;
+				await this.plugin.saveSettings();
+				await this.fileTree.loadPath(dir);
+				await this.refreshChanges();
+				this.startWatching();
+			})();
 		});
 	}
 
@@ -98,23 +103,17 @@ export class SourceObserverView extends ItemView {
 		this.stopWatching();
 
 		const schedule = () => {
-			if (this.refreshTimer) clearTimeout(this.refreshTimer);
-			this.refreshTimer = setTimeout(() => this.refreshChanges(), 800);
+			if (this.refreshTimer) window.clearTimeout(this.refreshTimer);
+			this.refreshTimer = window.setTimeout(() => { void this.refreshChanges(); }, 800);
 		};
 
 		const gitIndex = path.join(this.repoPath, '.git', 'index');
-		try {
-			this.watchers.push(fs.watch(gitIndex, schedule));
-		} catch { /* not a git repo or .git/index absent */ }
-
-		try {
-			// Shallow watch on the root catches new/deleted untracked files
-			this.watchers.push(fs.watch(this.repoPath, schedule));
-		} catch { /* ignore */ }
+		try { this.watchers.push(fs.watch(gitIndex, schedule)); } catch { /* not a git repo */ }
+		try { this.watchers.push(fs.watch(this.repoPath, schedule)); } catch { /* ignore */ }
 	}
 
 	private stopWatching() {
-		if (this.refreshTimer) { clearTimeout(this.refreshTimer); this.refreshTimer = null; }
+		if (this.refreshTimer) { window.clearTimeout(this.refreshTimer); this.refreshTimer = null; }
 		for (const w of this.watchers) { try { w.close(); } catch { /* ignore */ } }
 		this.watchers = [];
 	}
@@ -202,16 +201,18 @@ export class SourceObserverView extends ItemView {
 		row.createSpan({ cls: 'so-change-file', text: path.basename(cf.file) });
 		row.title = cf.file;
 
-		row.addEventListener('click', async () => {
-			this.changesContainer.querySelectorAll('.so-change-row-active').forEach((el) =>
-				el.removeClass('so-change-row-active'),
-			);
-			row.addClass('so-change-row-active');
-			const absPath = path.isAbsolute(cf.file) ? cf.file : path.join(this.repoPath, cf.file);
-			this.pathLabel.setText(cf.file + ' (diff)');
-			this.rightPane.empty();
-			const diff = await getFileDiff(this.repoPath, absPath);
-			renderDiff(this.rightPane, diff);
+		row.addEventListener('click', () => {
+			void (async () => {
+				this.changesContainer.querySelectorAll('.so-change-row-active').forEach((el) =>
+					el.removeClass('so-change-row-active'),
+				);
+				row.addClass('so-change-row-active');
+				const absPath = path.isAbsolute(cf.file) ? cf.file : path.join(this.repoPath, cf.file);
+				this.pathLabel.setText(cf.file + ' (diff)');
+				this.rightPane.empty();
+				const diff = await getFileDiff(this.repoPath, absPath);
+				renderDiff(this.rightPane, diff);
+			})();
 		});
 	}
 

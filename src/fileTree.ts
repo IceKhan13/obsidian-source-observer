@@ -98,7 +98,7 @@ export class FileTree {
 		for (const fullPath of matches) {
 			const rel = path.relative(this.rootPath, fullPath);
 			const row = this.container.createDiv({ cls: 'so-tree-row so-tree-file' });
-			row.style.paddingLeft = '6px';
+			row.setCssProps({ '--so-indent': '6px' });
 			const iconEl = row.createSpan({ cls: 'so-tree-icon' });
 			const [icon, cls] = fileIcon(path.basename(fullPath));
 			setIcon(iconEl, icon);
@@ -161,7 +161,7 @@ export class FileTree {
 
 	private renderNode(node: TreeNode, parent: HTMLElement, depth: number) {
 		const row = parent.createDiv({ cls: 'so-tree-row' });
-		row.style.paddingLeft = `${depth * 14 + 6}px`;
+		row.setCssProps({ '--so-indent': `${depth * 14 + 6}px` });
 
 		const iconEl = row.createSpan({ cls: 'so-tree-icon' });
 
