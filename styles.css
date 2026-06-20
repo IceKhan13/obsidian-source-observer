@@ -122,7 +122,7 @@
 	flex: 1;
 	min-height: 0;
 }
-.so-section-body-hidden { display: none !important; }
+.so-section-body.so-section-body-hidden { display: none; }
 
 /* ── Search input ────────────────────────────────────────────── */
 .so-search-input {
@@ -137,7 +137,7 @@
 	flex-shrink: 0;
 }
 .so-search-input:focus { border-color: var(--background-modifier-border-hover); }
-.so-search-input-hidden { display: none !important; }
+.so-search-input.so-search-input-hidden { display: none; }
 
 .so-search-empty {
 	display: block;
@@ -168,8 +168,8 @@
 	color: var(--text-normal);
 }
 .so-tree-row:hover { background: var(--background-modifier-hover); }
-.so-tree-row-active {
-	background: var(--background-modifier-active-hover) !important;
+.so-tree-row.so-tree-row-active {
+	background: var(--background-modifier-active-hover);
 	color: var(--text-accent);
 }
 
@@ -240,7 +240,7 @@
 	overflow: hidden;
 }
 .so-change-row:hover { background: var(--background-modifier-hover); }
-.so-change-row-active { background: var(--background-modifier-active-hover) !important; }
+.so-change-row.so-change-row-active { background: var(--background-modifier-active-hover); }
 
 .so-change-badge {
 	font-size: 10px;
