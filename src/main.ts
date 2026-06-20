@@ -18,7 +18,7 @@ export default class SourceObserverPlugin extends Plugin {
 		this.addRibbonIcon('code-2', 'Source observer', () => { void this.activateView(); });
 
 		this.addCommand({
-			id: 'open-source-observer',
+			id: 'open',
 			name: 'Open',
 			callback: () => { void this.activateView(); },
 		});
