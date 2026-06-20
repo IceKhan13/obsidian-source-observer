@@ -30,4 +30,11 @@ export default tseslint.config(
 		},
 	},
 	...obsidianmd.configs.recommended,
+	{
+		// @codemirror/* and @lezer/* are Obsidian-provided externals (not bundled).
+		// They live in devDependencies intentionally — allow importing them from src.
+		rules: {
+			'import/no-extraneous-dependencies': ['error', { devDependencies: true }],
+		},
+	},
 );

@@ -12,14 +12,12 @@
 	},
 	"keywords": [],
 	"license": "MIT",
-	"dependencies": {
+	"devDependencies": {
+		"@codemirror/lang-css": "^6.3.1",
 		"@codemirror/language": "^6.12.3",
 		"@codemirror/state": "^6.6.0",
 		"@codemirror/view": "^6.43.1",
-		"@lezer/highlight": "^1.2.1"
-	},
-	"devDependencies": {
-		"@codemirror/lang-css": "^6.3.1",
+		"@lezer/highlight": "^1.2.1",
 		"@codemirror/lang-html": "^6.4.11",
 		"@codemirror/lang-javascript": "^6.2.5",
 		"@codemirror/lang-json": "^6.0.2",

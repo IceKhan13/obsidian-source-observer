@@ -24,7 +24,6 @@ export class SourceObserverSettingTab extends PluginSettingTab {
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
-		new Setting(containerEl).setName('Source observer').setHeading();
 
 		new Setting(containerEl)
 			.setName('Font size')

@@ -14,10 +14,6 @@ interface ElectronRemote {
 	};
 }
 
-type ElectronWindow = typeof window & {
-	require: (module: 'electron') => { remote: ElectronRemote };
-};
-
 export class SourceObserverView extends ItemView {
 	plugin: SourceObserverPlugin;
 	private fileTree!: FileTree;
@@ -87,10 +83,10 @@ export class SourceObserverView extends ItemView {
 
 		openBtn.addEventListener('click', () => {
 			void (async () => {
-				const { remote } = (window as ElectronWindow).require('electron');
+				const { remote } = window.require('electron') as { remote: ElectronRemote };
 				const result = await remote.dialog.showOpenDialog({ properties: ['openDirectory'] });
-				if (result.canceled || result.filePaths.length === 0) return;
-				const dir = result.filePaths[0] as string;
+				const [dir] = result.filePaths;
+				if (result.canceled || !dir) return;
 				this.repoPath = dir;
 				this.plugin.settings.lastOpenedPath = dir;
 				await this.plugin.saveSettings();
