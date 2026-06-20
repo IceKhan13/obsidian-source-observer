@@ -12,6 +12,14 @@ A lightweight codebase viewer for [Obsidian](https://obsidian.md). Browse any fo
 - **Collapsible sections** — Files and Changes panels collapse independently
 - **Search** — filter files or changed files by name via the search icon in each section header
 
+## Usage
+
+1. Click the `</>` icon in the ribbon or run **Open Source Observer** from the command palette
+2. Click **Open folder…** to select any directory on your machine
+3. Browse files in the **Files** panel — click to open with syntax highlighting
+4. Switch to the **Changes** panel to see modified, added, and deleted files relative to git HEAD; click any file to view its diff
+5. Use the search icon in each section header to filter by filename
+
 ## Installation
 
 1. Copy `main.js`, `styles.css`, and `manifest.json` into `<vault>/.obsidian/plugins/obsidian-source-observer/`
