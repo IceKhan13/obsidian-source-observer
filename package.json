@@ -1,6 +1,6 @@
 {
 	"name": "source-observer",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Browse any local codebase, view syntax-highlighted files, and review git diffs — without leaving your vault.",
 	"main": "main.js",
 	"type": "module",
