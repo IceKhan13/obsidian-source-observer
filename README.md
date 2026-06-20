@@ -2,7 +2,7 @@
 
 A lightweight codebase viewer for [Obsidian](https://obsidian.md). Browse any folder on disk, read files with syntax highlighting, and review git changes — without leaving your vault.
 
-> Desktop only.
+![Source Observer](obsidian-plugin.png)
 
 ## Features
 

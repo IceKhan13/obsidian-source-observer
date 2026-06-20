@@ -61,6 +61,7 @@ function fileIcon(name: string): [string, string] {
 	return EXT_ICON[ext] ?? ['file', 'so-icon-default'];
 }
 
+/** Renders a lazy-expanding directory tree and notifies the caller when a file is selected. */
 export class FileTree {
 	private container: HTMLElement;
 	private showHidden: boolean;
@@ -78,12 +79,14 @@ export class FileTree {
 		this.onSelect = onSelect;
 	}
 
+	/** Loads `dirPath` as the new root and re-renders the tree. */
 	async loadPath(dirPath: string) {
 		this.rootPath = dirPath;
 		this.treeRoot = this.buildNode(dirPath, true);
 		this.renderTree();
 	}
 
+	/** Filters the tree to files whose name contains `query`; clears filter when query is empty. */
 	search(query: string) {
 		this.container.empty();
 		if (!query.trim()) {

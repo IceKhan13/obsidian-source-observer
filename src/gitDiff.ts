@@ -10,6 +10,7 @@ export interface ChangedFile {
 	file: string; // relative path
 }
 
+/** Runs a git command in `cwd` and returns stdout/stderr, swallowing non-zero exit codes. */
 async function runGit(cwd: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
 	try {
 		const { stdout, stderr } = await execFileAsync('git', args, { cwd, maxBuffer: 10 * 1024 * 1024 });
@@ -20,6 +21,7 @@ async function runGit(cwd: string, args: string[]): Promise<{ stdout: string; st
 	}
 }
 
+/** Returns all changed files in the repo according to `git status --short`. */
 export async function getChangedFiles(repoPath: string): Promise<ChangedFile[]> {
 	const { stdout } = await runGit(repoPath, ['status', '--short', '-u']);
 	return stdout
@@ -28,6 +30,11 @@ export async function getChangedFiles(repoPath: string): Promise<ChangedFile[]> 
 		.map((l) => ({ code: l.slice(0, 2), file: l.slice(3).trim() }));
 }
 
+/**
+ * Returns a unified diff string for `filePath` relative to `repoPath`.
+ * Falls back to `git diff --cached` for staged-only files, and to a
+ * synthetic all-additions diff for untracked files.
+ */
 export async function getFileDiff(repoPath: string, filePath: string): Promise<string> {
 	const rel = path.relative(repoPath, filePath) || filePath;
 
@@ -48,6 +55,7 @@ export async function getFileDiff(repoPath: string, filePath: string): Promise<s
 	}
 }
 
+/** Renders a unified diff string into `container` with syntax-coloured spans. */
 export function renderDiff(container: HTMLElement, diff: string) {
 	container.empty();
 	if (!diff.trim()) {
