@@ -1,8 +1,313 @@
-/*
+/* ── Root layout ─────────────────────────────────────────────── */
+.so-root {
+	display: flex;
+	height: 100%;
+	overflow: hidden;
+	font-size: 13px;
+}
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
+/* ── Sidebar ─────────────────────────────────────────────────── */
+.so-sidebar {
+	width: 240px;
+	min-width: 160px;
+	max-width: 360px;
+	display: flex;
+	flex-direction: column;
+	border-right: 1px solid var(--background-modifier-border);
+	overflow: hidden;
+}
 
-If your plugin does not need CSS, delete this file.
+.so-open-btn {
+	margin: 8px 8px 4px;
+	padding: 4px 10px;
+	border-radius: 4px;
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-secondary);
+	color: var(--text-normal);
+	cursor: pointer;
+	font-size: 12px;
+	flex-shrink: 0;
+}
+.so-open-btn:hover { background: var(--background-modifier-hover); }
 
-*/
+/* ── Collapsible section ─────────────────────────────────────── */
+.so-section {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	flex: 1;
+}
+
+.so-section-header {
+	display: flex;
+	align-items: center;
+	padding: 5px 6px 5px 10px;
+	border-top: 1px solid var(--background-modifier-border);
+	flex-shrink: 0;
+	gap: 4px;
+}
+
+.so-section-toggle {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	flex: 1;
+	cursor: pointer;
+	user-select: none;
+	min-width: 0;
+}
+.so-section-toggle:hover .so-section-title { color: var(--text-normal); }
+
+.so-section-chevron {
+	font-size: 10px;
+	color: var(--text-muted);
+	width: 10px;
+	text-align: center;
+	flex-shrink: 0;
+}
+
+.so-section-title {
+	font-size: 10px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.07em;
+	color: var(--text-muted);
+}
+
+/* Right slot: counts + search icon */
+.so-section-header-right {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	flex-shrink: 0;
+}
+
+/* Count badges */
+.so-count-badge {
+	font-size: 10px;
+	font-weight: 700;
+	font-family: var(--font-monospace);
+	padding: 0 5px;
+	border-radius: 8px;
+	line-height: 16px;
+}
+.so-count-new      { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
+.so-count-modified { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
+
+/* Search icon button */
+.so-search-icon-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	padding: 0;
+	border: none;
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+	border-radius: 4px;
+}
+.so-search-icon-btn:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+.so-search-icon-btn svg { width: 13px; height: 13px; }
+
+/* ── Section body ────────────────────────────────────────────── */
+.so-section-body {
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	flex: 1;
+	min-height: 0;
+}
+.so-section-body-hidden { display: none !important; }
+
+/* ── Search input ────────────────────────────────────────────── */
+.so-search-input {
+	margin: 4px 8px;
+	padding: 3px 8px;
+	border-radius: 4px;
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-primary);
+	color: var(--text-normal);
+	font-size: 12px;
+	outline: none;
+	flex-shrink: 0;
+}
+.so-search-input:focus { border-color: var(--background-modifier-border-hover); }
+.so-search-input-hidden { display: none !important; }
+
+.so-search-empty {
+	display: block;
+	padding: 4px 10px;
+	font-size: 12px;
+	color: var(--text-muted);
+}
+
+/* ── File tree ───────────────────────────────────────────────── */
+.so-tree {
+	flex: 1;
+	overflow-y: auto;
+	padding-bottom: 4px;
+	min-height: 0;
+}
+
+.so-tree-row {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding-top: 2px;
+	padding-bottom: 2px;
+	cursor: pointer;
+	border-radius: 3px;
+	white-space: nowrap;
+	overflow: hidden;
+	color: var(--text-normal);
+}
+.so-tree-row:hover { background: var(--background-modifier-hover); }
+.so-tree-row-active {
+	background: var(--background-modifier-active-hover) !important;
+	color: var(--text-accent);
+}
+
+.so-tree-icon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 16px;
+	flex-shrink: 0;
+}
+.so-tree-icon svg { width: 13px; height: 13px; }
+
+/* Folder */
+.so-icon-folder  { color: #a78bfa; }
+
+/* Language colours */
+.so-icon-ts      { color: #3b82f6; }
+.so-icon-js      { color: #f59e0b; }
+.so-icon-py      { color: #34d399; }
+.so-icon-rs      { color: #f97316; }
+.so-icon-go      { color: #22d3ee; }
+.so-icon-rb      { color: #f87171; }
+.so-icon-java    { color: #fb923c; }
+.so-icon-c       { color: #818cf8; }
+.so-icon-css     { color: #60a5fa; }
+.so-icon-html    { color: #f87171; }
+.so-icon-vue     { color: #4ade80; }
+.so-icon-svelte  { color: #f97316; }
+.so-icon-json    { color: #fbbf24; }
+.so-icon-md      { color: #94a3b8; }
+.so-icon-txt     { color: #94a3b8; }
+.so-icon-sh      { color: #4ade80; }
+.so-icon-env     { color: #f87171; }
+.so-icon-img     { color: #c084fc; }
+.so-icon-default { color: var(--text-muted); }
+
+.so-tree-label {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-size: 12px;
+}
+.so-tree-dir > .so-tree-label { font-weight: 600; }
+.so-tree-children-hidden { display: none; }
+
+/* ── Changes list ────────────────────────────────────────────── */
+.so-changes {
+	flex: 1;
+	overflow-y: auto;
+	min-height: 0;
+	padding-bottom: 6px;
+}
+
+.so-changes-empty {
+	display: block;
+	padding: 4px 10px;
+	font-size: 12px;
+	color: var(--text-muted);
+}
+
+.so-change-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 2px 10px;
+	cursor: pointer;
+	border-radius: 3px;
+	white-space: nowrap;
+	overflow: hidden;
+}
+.so-change-row:hover { background: var(--background-modifier-hover); }
+.so-change-row-active { background: var(--background-modifier-active-hover) !important; }
+
+.so-change-badge {
+	font-size: 10px;
+	font-weight: 700;
+	font-family: var(--font-monospace);
+	width: 16px;
+	text-align: center;
+	flex-shrink: 0;
+}
+.so-badge-modified { color: #f59e0b; }
+.so-badge-added    { color: #4ade80; }
+.so-badge-deleted  { color: #f87171; }
+
+.so-change-file {
+	font-size: 12px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	color: var(--text-normal);
+}
+
+/* ── Right pane ──────────────────────────────────────────────── */
+.so-main {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	min-width: 0;
+}
+
+.so-path-label {
+	padding: 5px 12px;
+	font-size: 11px;
+	color: var(--text-muted);
+	font-family: var(--font-monospace);
+	border-bottom: 1px solid var(--background-modifier-border);
+	background: var(--background-secondary);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	flex-shrink: 0;
+	min-height: 24px;
+}
+
+.so-pane {
+	flex: 1;
+	overflow: auto;
+	min-height: 0;
+}
+
+/* ── Diff rendering ──────────────────────────────────────────── */
+.so-diff-clean {
+	padding: 12px;
+	color: var(--text-muted);
+	font-size: 12px;
+}
+
+.so-diff-pre {
+	margin: 0;
+	font-family: var(--font-monospace);
+	font-size: 12px;
+	line-height: 1.6;
+	padding: 10px 12px;
+	overflow-x: auto;
+	white-space: pre;
+}
+
+.so-diff-add    { color: #4ade80; background: rgba(74, 222, 128, 0.08); display: block; }
+.so-diff-del    { color: #f87171; background: rgba(248, 113, 113, 0.08); display: block; }
+.so-diff-hunk   { color: #60a5fa; display: block; }
+.so-diff-header { color: var(--text-muted); font-weight: 600; display: block; }
+.so-diff-file   { color: var(--text-accent); display: block; }

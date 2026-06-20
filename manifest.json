@@ -1,11 +1,10 @@
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
+	"id": "obsidian-source-observer",
+	"name": "Source Observer",
 	"version": "1.0.0",
 	"minAppVersion": "1.0.0",
-	"description": "Demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
-	"isDesktopOnly": false
+	"description": "Lightweight codebase viewer with syntax highlighting and git diff.",
+	"author": "Iskandar Sitdikov",
+	"authorUrl": "",
+	"isDesktopOnly": true
 }
