@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-sample-plugin",
-	"version": "1.0.0",
-	"description": "This is a sample plugin for Obsidian (https://obsidian.md)",
+	"name": "source-observer",
+	"version": "1.0.1",
+	"description": "Browse any local codebase, view syntax-highlighted files, and review git diffs — without leaving your vault.",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {

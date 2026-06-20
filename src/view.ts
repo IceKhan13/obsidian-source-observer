@@ -76,8 +76,8 @@ export class SourceObserverView extends ItemView {
 			},
 		);
 
-		treeSearch.addEventListener('input', () => { this.fileTree.search(treeSearch.value); });
-		changesSearch.addEventListener('input', () => { this.renderChanges(changesSearch.value); });
+		this.registerDomEvent(treeSearch, 'input', () => { this.fileTree.search(treeSearch.value); });
+		this.registerDomEvent(changesSearch, 'input', () => { this.renderChanges(changesSearch.value); });
 
 		if (this.plugin.settings.lastOpenedPath) {
 			this.repoPath = this.plugin.settings.lastOpenedPath;
@@ -86,7 +86,7 @@ export class SourceObserverView extends ItemView {
 			this.startWatching();
 		}
 
-		openBtn.addEventListener('click', () => {
+		this.registerDomEvent(openBtn, 'click', () => {
 			void (async () => {
 				const { remote } = window.require('electron') as { remote: ElectronRemote };
 				const result = await remote.dialog.showOpenDialog({ properties: ['openDirectory'] });
@@ -141,13 +141,13 @@ export class SourceObserverView extends ItemView {
 			attr: { type: 'text', placeholder: `Search ${title.toLowerCase()}…` },
 		});
 
-		toggle.addEventListener('click', () => {
+		this.registerDomEvent(toggle, 'click', () => {
 			const isOpen = !body.hasClass('so-section-body-hidden');
 			body.toggleClass('so-section-body-hidden', isOpen);
 			chevron.setText(isOpen ? '▸' : '▾');
 		});
 
-		searchBtn.addEventListener('click', (e) => {
+		this.registerDomEvent(searchBtn, 'click', (e) => {
 			e.stopPropagation();
 			const hidden = searchInput.hasClass('so-search-input-hidden');
 			searchInput.toggleClass('so-search-input-hidden', !hidden);

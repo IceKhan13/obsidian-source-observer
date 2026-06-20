@@ -1,10 +1,9 @@
 {
-	"id": "obsidian-source-observer",
+	"id": "source-observer",
 	"name": "Source Observer",
-	"version": "1.0.0",
 	"minAppVersion": "1.7.2",
-	"description": "Lightweight codebase viewer with syntax highlighting and git diff.",
+	"description": "Browse any local codebase, view syntax-highlighted files, and review git diffs — without leaving your vault.",
 	"author": "Iskandar Sitdikov",
-	"authorUrl": "",
+	"authorUrl": "https://github.com/IceKhan13",
 	"isDesktopOnly": true
 }
