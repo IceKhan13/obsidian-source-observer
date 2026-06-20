@@ -2,7 +2,7 @@
 	"id": "obsidian-source-observer",
 	"name": "Source Observer",
 	"version": "1.0.0",
-	"minAppVersion": "1.0.0",
+	"minAppVersion": "1.7.2",
 	"description": "Lightweight codebase viewer with syntax highlighting and git diff.",
 	"author": "Iskandar Sitdikov",
 	"authorUrl": "",

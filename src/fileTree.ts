@@ -161,7 +161,7 @@ export class FileTree {
 
 	private renderNode(node: TreeNode, parent: HTMLElement, depth: number) {
 		const row = parent.createDiv({ cls: 'so-tree-row' });
-		row.style.paddingLeft = `${depth * 14 + 6}px`;
+		row.setCssProps({ 'padding-left': `${depth * 14 + 6}px` });
 
 		const iconEl = row.createSpan({ cls: 'so-tree-icon' });
 
