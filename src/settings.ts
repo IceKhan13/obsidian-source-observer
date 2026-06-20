@@ -1,6 +1,7 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
 import type SourceObserverPlugin from './main';
 
+/** Persisted plugin settings stored in `data.json`. */
 export interface SourceObserverSettings {
 	lastOpenedPath: string;
 	fontSize: number;
@@ -13,6 +14,7 @@ export const DEFAULT_SETTINGS: SourceObserverSettings = {
 	showHidden: true,
 };
 
+/** Obsidian settings tab for configuring font size and hidden-file visibility. */
 export class SourceObserverSettingTab extends PluginSettingTab {
 	plugin: SourceObserverPlugin;
 

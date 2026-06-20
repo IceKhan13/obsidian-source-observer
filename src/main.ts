@@ -6,6 +6,7 @@ import {
 } from './settings';
 import { SourceObserverView, VIEW_TYPE } from './view';
 
+/** Root plugin class — registers the view, ribbon icon, command, and settings tab. */
 export default class SourceObserverPlugin extends Plugin {
 	settings!: SourceObserverSettings;
 
@@ -27,6 +28,7 @@ export default class SourceObserverPlugin extends Plugin {
 
 	onunload() {}
 
+	/** Opens the Source Observer tab, reusing an existing leaf if one is already open. */
 	async activateView() {
 		const { workspace } = this.app;
 		const leaves = workspace.getLeavesOfType(VIEW_TYPE);

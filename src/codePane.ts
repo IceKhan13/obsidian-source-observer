@@ -89,6 +89,7 @@ const obsidianTheme = EditorView.theme({
 	'&.cm-focused .cm-selectionBackground': { background: 'var(--text-selection)' },
 });
 
+/** Read-only CodeMirror 6 editor pane that syntax-highlights files using Obsidian CSS variables. */
 export class CodePane {
 	private container: HTMLElement;
 	private view: EditorView | null = null;
@@ -99,6 +100,7 @@ export class CodePane {
 		this.fontSize = fontSize;
 	}
 
+	/** Loads `filePath` into the editor, replacing any previously open file. */
 	open(filePath: string) {
 		let content: string;
 		try {
@@ -128,6 +130,7 @@ export class CodePane {
 		this.view = new EditorView({ state, parent: this.container });
 	}
 
+	/** Destroys the CodeMirror instance and frees its DOM nodes. */
 	destroy() {
 		this.view?.destroy();
 		this.view = null;

@@ -14,6 +14,11 @@ interface ElectronRemote {
 	};
 }
 
+/**
+ * Main plugin view — two-column layout with a file/changes sidebar on the left
+ * and a code or diff pane on the right. Watches the repo with `fs.watch` and
+ * debounces git status refreshes on every file-system event.
+ */
 export class SourceObserverView extends ItemView {
 	plugin: SourceObserverPlugin;
 	private fileTree!: FileTree;
@@ -109,7 +114,7 @@ export class SourceObserverView extends ItemView {
 
 		const gitIndex = path.join(this.repoPath, '.git', 'index');
 		try { this.watchers.push(fs.watch(gitIndex, schedule)); } catch { /* not a git repo */ }
-		try { this.watchers.push(fs.watch(this.repoPath, schedule)); } catch { /* ignore */ }
+		try { this.watchers.push(fs.watch(this.repoPath, { recursive: true }, schedule)); } catch { /* ignore */ }
 	}
 
 	private stopWatching() {
