@@ -54,6 +54,7 @@ const EXT_ICON: Record<string, [string, string]> = {
 	svg:   ['image',       'so-icon-img'],
 	webp:  ['image',       'so-icon-img'],
 	ico:   ['image',       'so-icon-img'],
+	php:   ['file-code-2', 'so-icon-php'],
 };
 
 function fileIcon(name: string): [string, string] {

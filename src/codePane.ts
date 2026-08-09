@@ -11,6 +11,7 @@ import { css } from '@codemirror/lang-css';
 import { html } from '@codemirror/lang-html';
 import { json } from '@codemirror/lang-json';
 import { markdown } from '@codemirror/lang-markdown';
+import { php } from '@codemirror/lang-php';
 
 const EXT_LANG: Record<string, () => ReturnType<typeof javascript>> = {
 	js:   () => javascript(),
@@ -28,6 +29,7 @@ const EXT_LANG: Record<string, () => ReturnType<typeof javascript>> = {
 	jsonc:() => json(),
 	md:   () => markdown(),
 	mdx:  () => markdown(),
+	php:  () => php(),
 };
 
 // Highlight style built entirely from Obsidian's CSS variables so it
