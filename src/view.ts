@@ -29,8 +29,10 @@ export class SourceObserverView extends ItemView {
 	private pathLabel!: HTMLElement;
 	private repoPath = '';
 	private allChanges: ChangedFile[] = [];
+	private changesQuery = '';
 	private watchers: fs.FSWatcher[] = [];
 	private refreshTimer: number | null = null;
+	private diffRequestId = 0;
 
 	constructor(leaf: WorkspaceLeaf, plugin: SourceObserverPlugin) {
 		super(leaf);
@@ -70,14 +72,16 @@ export class SourceObserverView extends ItemView {
 			this.plugin.settings.showHidden,
 			(filePath) => {
 				this.pathLabel.setText(filePath);
-				this.rightPane.empty();
-				this.codePane = new CodePane(this.rightPane, this.plugin.settings.fontSize);
+				// Reuse the pane — open() already disposes the previous editor.
 				this.codePane.open(filePath);
 			},
 		);
 
 		this.registerDomEvent(treeSearch, 'input', () => { this.fileTree.search(treeSearch.value); });
-		this.registerDomEvent(changesSearch, 'input', () => { this.renderChanges(changesSearch.value); });
+		this.registerDomEvent(changesSearch, 'input', () => {
+			this.changesQuery = changesSearch.value;
+			this.renderChanges(this.changesQuery);
+		});
 
 		if (this.plugin.settings.lastOpenedPath) {
 			this.repoPath = this.plugin.settings.lastOpenedPath;
@@ -112,9 +116,25 @@ export class SourceObserverView extends ItemView {
 			this.refreshTimer = window.setTimeout(() => { void this.refreshChanges(); }, 800);
 		};
 
+		const watch = (target: string, opts?: fs.WatchOptions) => {
+			try {
+				// 'error' must be handled: unhandled watcher errors throw as
+				// uncaught exceptions on the EventEmitter.
+				const w = fs.watch(target, opts ?? {}, schedule);
+				w.on('error', () => { /* watched path removed or unreadable */ });
+				this.watchers.push(w);
+			} catch { /* not a git repo */ }
+		};
+
 		const gitIndex = path.join(this.repoPath, '.git', 'index');
-		try { this.watchers.push(fs.watch(gitIndex, schedule)); } catch { /* not a git repo */ }
-		try { this.watchers.push(fs.watch(this.repoPath, { recursive: true }, schedule)); } catch { /* ignore */ }
+		watch(gitIndex);
+		// Recursive watch is unsupported on Linux — fall back to watching the
+		// root non-recursively so at least top-level changes refresh the list.
+		if (process.platform === 'darwin' || process.platform === 'win32') {
+			watch(this.repoPath, { recursive: true });
+		} else {
+			watch(this.repoPath);
+		}
 	}
 
 	private stopWatching() {
@@ -167,15 +187,17 @@ export class SourceObserverView extends ItemView {
 	private async refreshChanges() {
 		this.allChanges = await getChangedFiles(this.repoPath);
 		this.updateChangeCounts();
-		this.renderChanges('');
+		this.renderChanges(this.changesQuery);
 	}
 
 	private updateChangeCounts() {
 		this.changesCounts.empty();
 		const newCount = this.allChanges.filter((cf) => cf.code.includes('A') || cf.code.includes('?')).length;
 		const modCount = this.allChanges.filter((cf) => cf.code.includes('M')).length;
+		const delCount = this.allChanges.filter((cf) => cf.code.includes('D')).length;
 		if (newCount > 0) this.changesCounts.createSpan({ cls: 'so-count-badge so-count-new', text: String(newCount) });
 		if (modCount > 0) this.changesCounts.createSpan({ cls: 'so-count-badge so-count-modified', text: String(modCount) });
+		if (delCount > 0) this.changesCounts.createSpan({ cls: 'so-count-badge so-count-deleted', text: String(delCount) });
 	}
 
 	private renderChanges(query: string) {
@@ -208,14 +230,17 @@ export class SourceObserverView extends ItemView {
 
 		row.addEventListener('click', () => {
 			void (async () => {
+				// Guard against races: only the most recent click may render.
+				const requestId = ++this.diffRequestId;
 				this.changesContainer.querySelectorAll('.so-change-row-active').forEach((el) =>
 					el.removeClass('so-change-row-active'),
 				);
 				row.addClass('so-change-row-active');
 				const absPath = path.isAbsolute(cf.file) ? cf.file : path.join(this.repoPath, cf.file);
 				this.pathLabel.setText(cf.file + ' (diff)');
-				this.rightPane.empty();
 				const diff = await getFileDiff(this.repoPath, absPath);
+				if (requestId !== this.diffRequestId) return;
+				this.rightPane.empty();
 				renderDiff(this.rightPane, diff);
 			})();
 		});
