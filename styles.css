@@ -204,6 +204,7 @@
 .so-icon-sh      { color: #4ade80; }
 .so-icon-env     { color: #f87171; }
 .so-icon-img     { color: #c084fc; }
+.so-icon-php     { color: #777bb4; }
 .so-icon-default { color: var(--text-muted); }
 
 .so-tree-label {
