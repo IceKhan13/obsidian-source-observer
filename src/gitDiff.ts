@@ -21,13 +21,26 @@ async function runGit(cwd: string, args: string[]): Promise<{ stdout: string; st
 	}
 }
 
-/** Returns all changed files in the repo according to `git status --short`. */
+/**
+ * Returns all changed files in the repo according to `git status --porcelain -z`.
+ * The NUL-separated format avoids quoting of non-ASCII/whitespace paths, and
+ * for renames the destination path is used as `file`.
+ */
 export async function getChangedFiles(repoPath: string): Promise<ChangedFile[]> {
-	const { stdout } = await runGit(repoPath, ['status', '--short', '-u']);
-	return stdout
-		.split('\n')
-		.filter((l) => l.trim())
-		.map((l) => ({ code: l.slice(0, 2), file: l.slice(3).trim() }));
+	const { stdout } = await runGit(repoPath, ['status', '--porcelain=v1', '-z', '-u']);
+	const entries = stdout.split('\0');
+	const results: ChangedFile[] = [];
+	for (let i = 0; i < entries.length; i++) {
+		const entry = entries[i] ?? '';
+		if (!entry.trim()) continue;
+		const code = entry.slice(0, 2);
+		const file = entry.slice(3);
+		// Renames/copies in -z mode are followed by the original path as a
+		// separate NUL-terminated entry; skip it and keep the new path.
+		if (code.includes('R') || code.includes('C')) i++;
+		results.push({ code, file });
+	}
+	return results;
 }
 
 /**
