@@ -4,9 +4,14 @@ import * as path from 'path';
 import type SourceObserverPlugin from './main';
 import { FileTree } from './fileTree';
 import { CodePane } from './codePane';
-import { getChangedFiles, getFileDiff, renderDiff, ChangedFile } from './gitDiff';
+import { getChangedFiles, getFileDiff, isGitRepo, renderDiff, ChangedFile } from './gitDiff';
 
 export const VIEW_TYPE = 'source-observer';
+
+/** Debounce delay for the file-tree search input, in ms. */
+const SEARCH_DEBOUNCE_MS = 200;
+/** Interval for polling `git status` when fs.watch is unavailable, in ms. */
+const GIT_POLL_MS = 5000;
 
 interface ElectronRemote {
 	dialog: {
@@ -16,8 +21,8 @@ interface ElectronRemote {
 
 /**
  * Main plugin view — two-column layout with a file/changes sidebar on the left
- * and a code or diff pane on the right. Watches the repo with `fs.watch` and
- * debounces git status refreshes on every file-system event.
+ * and a code or diff pane on the right. Watches `.git/index` and `.git/refs`
+ * with `fs.watch`, falling back to polling `git status` on an interval.
  */
 export class SourceObserverView extends ItemView {
 	plugin: SourceObserverPlugin;
@@ -28,10 +33,13 @@ export class SourceObserverView extends ItemView {
 	private changesCounts!: HTMLElement;
 	private pathLabel!: HTMLElement;
 	private repoPath = '';
+	private isRepo = false;
 	private allChanges: ChangedFile[] = [];
 	private changesQuery = '';
 	private watchers: fs.FSWatcher[] = [];
+	private pollTimer: number | null = null;
 	private refreshTimer: number | null = null;
+	private treeSearchTimer: number | null = null;
 	private diffRequestId = 0;
 
 	constructor(leaf: WorkspaceLeaf, plugin: SourceObserverPlugin) {
@@ -57,6 +65,17 @@ export class SourceObserverView extends ItemView {
 
 		const { body: changesBody, searchInput: changesSearch, headerRight: changesHeaderRight } =
 			this.buildSection(sidebar, 'Changes');
+
+		const refreshBtn = changesHeaderRight.createEl('button', {
+			cls: 'so-search-icon-btn',
+			attr: { 'aria-label': 'Refresh changes' },
+		});
+		setIcon(refreshBtn, 'refresh-cw');
+		this.registerDomEvent(refreshBtn, 'click', (e) => {
+			e.stopPropagation();
+			void this.refreshChanges();
+		});
+
 		this.changesCounts = changesHeaderRight.createDiv({ cls: 'so-section-counts' });
 		this.changesContainer = changesBody.createDiv({ cls: 'so-changes' });
 
@@ -72,22 +91,31 @@ export class SourceObserverView extends ItemView {
 			this.plugin.settings.showHidden,
 			(filePath) => {
 				this.pathLabel.setText(filePath);
-				// Reuse the pane — open() already disposes the previous editor.
-				this.codePane.open(filePath);
+				void this.codePane.open(filePath);
 			},
 		);
 
-		this.registerDomEvent(treeSearch, 'input', () => { this.fileTree.search(treeSearch.value); });
+		this.registerDomEvent(treeSearch, 'input', () => {
+			if (this.treeSearchTimer) window.clearTimeout(this.treeSearchTimer);
+			this.treeSearchTimer = window.setTimeout(
+				() => { void this.fileTree.search(treeSearch.value); },
+				SEARCH_DEBOUNCE_MS,
+			);
+		});
 		this.registerDomEvent(changesSearch, 'input', () => {
 			this.changesQuery = changesSearch.value;
 			this.renderChanges(this.changesQuery);
 		});
 
+		// Re-render when font size or hidden-file settings change.
+		const settingsRef = this.plugin.settingsEvents.on('changed', () => {
+			this.codePane.setFontSize(this.plugin.settings.fontSize);
+			this.fileTree.setShowHidden(this.plugin.settings.showHidden);
+		});
+		this.register(() => this.plugin.settingsEvents.offref(settingsRef));
+
 		if (this.plugin.settings.lastOpenedPath) {
-			this.repoPath = this.plugin.settings.lastOpenedPath;
-			await this.fileTree.loadPath(this.repoPath);
-			await this.refreshChanges();
-			this.startWatching();
+			await this.openFolder(this.plugin.settings.lastOpenedPath);
 		}
 
 		this.registerDomEvent(openBtn, 'click', () => {
@@ -96,45 +124,51 @@ export class SourceObserverView extends ItemView {
 				const result = await remote.dialog.showOpenDialog({ properties: ['openDirectory'] });
 				const [dir] = result.filePaths;
 				if (result.canceled || !dir) return;
-				this.repoPath = dir;
 				this.plugin.settings.lastOpenedPath = dir;
 				await this.plugin.saveSettings();
-				await this.fileTree.loadPath(dir);
-				await this.refreshChanges();
-				this.startWatching();
+				await this.openFolder(dir);
 			})();
 		});
 	}
 
-	// Watch .git/index (staged changes) and the repo root (untracked files).
-	// Both use a shared debounce so rapid saves don't hammer git.
+	private async openFolder(dir: string) {
+		this.repoPath = dir;
+		this.isRepo = await isGitRepo(dir);
+		await this.fileTree.loadPath(dir);
+		await this.refreshChanges();
+		this.startWatching();
+		// Interval-based poll covers anything fs.watch misses (untracked
+		// files, platforms without reliable recursive watching).
+		if (this.pollTimer === null) {
+			this.pollTimer = this.registerInterval(
+				window.setInterval(() => { void this.refreshChanges(); }, GIT_POLL_MS),
+			);
+		}
+	}
+
+	// Watch .git/index (staged changes) and .git/refs (branch/commit updates).
+	// Both share a debounce so rapid saves don't hammer git.
 	private startWatching() {
 		this.stopWatching();
+		if (!this.isRepo) return;
 
 		const schedule = () => {
 			if (this.refreshTimer) window.clearTimeout(this.refreshTimer);
 			this.refreshTimer = window.setTimeout(() => { void this.refreshChanges(); }, 800);
 		};
 
-		const watch = (target: string, opts?: fs.WatchOptions) => {
+		const watch = (target: string) => {
 			try {
 				// 'error' must be handled: unhandled watcher errors throw as
 				// uncaught exceptions on the EventEmitter.
-				const w = fs.watch(target, opts ?? {}, schedule);
+				const w = fs.watch(target, schedule);
 				w.on('error', () => { /* watched path removed or unreadable */ });
 				this.watchers.push(w);
 			} catch { /* not a git repo */ }
 		};
 
-		const gitIndex = path.join(this.repoPath, '.git', 'index');
-		watch(gitIndex);
-		// Recursive watch is unsupported on Linux — fall back to watching the
-		// root non-recursively so at least top-level changes refresh the list.
-		if (process.platform === 'darwin' || process.platform === 'win32') {
-			watch(this.repoPath, { recursive: true });
-		} else {
-			watch(this.repoPath);
-		}
+		watch(path.join(this.repoPath, '.git', 'index'));
+		watch(path.join(this.repoPath, '.git', 'refs'));
 	}
 
 	private stopWatching() {
@@ -185,7 +219,9 @@ export class SourceObserverView extends ItemView {
 	}
 
 	private async refreshChanges() {
-		this.allChanges = await getChangedFiles(this.repoPath);
+		if (!this.repoPath) return;
+		this.isRepo = await isGitRepo(this.repoPath);
+		this.allChanges = this.isRepo ? await getChangedFiles(this.repoPath) : [];
 		this.updateChangeCounts();
 		this.renderChanges(this.changesQuery);
 	}
@@ -207,10 +243,12 @@ export class SourceObserverView extends ItemView {
 			: this.allChanges;
 
 		if (filtered.length === 0) {
-			this.changesContainer.createEl('span', {
-				cls: 'so-changes-empty',
-				text: query ? 'No results' : 'No changes',
-			});
+			const text = query
+				? 'No results'
+				: this.isRepo
+					? 'No changes'
+					: 'Not a git repository';
+			this.changesContainer.createEl('span', { cls: 'so-changes-empty', text });
 			return;
 		}
 		for (const cf of filtered) this.renderChangeRow(cf);
@@ -225,7 +263,10 @@ export class SourceObserverView extends ItemView {
 		else if (cf.code.includes('A') || cf.code.includes('?')) badge.addClass('so-badge-added');
 		else if (cf.code.includes('D')) badge.addClass('so-badge-deleted');
 
-		row.createSpan({ cls: 'so-change-file', text: path.basename(cf.file) });
+		const label = row.createSpan({ cls: 'so-change-file', text: path.basename(cf.file) });
+		// Basenames collide across directories — show the relative dir as context.
+		const dir = path.dirname(cf.file);
+		if (dir && dir !== '.') label.createSpan({ cls: 'so-change-dir', text: ` ${dir}/` });
 		row.title = cf.file;
 
 		row.addEventListener('click', () => {
@@ -240,7 +281,9 @@ export class SourceObserverView extends ItemView {
 				this.pathLabel.setText(cf.file + ' (diff)');
 				const diff = await getFileDiff(this.repoPath, absPath);
 				if (requestId !== this.diffRequestId) return;
-				this.rightPane.empty();
+				// Destroy the editor before emptying the pane, otherwise its
+				// DOM is orphaned without running CodeMirror cleanup.
+				this.codePane.destroy();
 				renderDiff(this.rightPane, diff);
 			})();
 		});
@@ -248,6 +291,7 @@ export class SourceObserverView extends ItemView {
 
 	async onClose() {
 		this.stopWatching();
+		if (this.treeSearchTimer) { window.clearTimeout(this.treeSearchTimer); this.treeSearchTimer = null; }
 		this.codePane?.destroy();
 	}
 }

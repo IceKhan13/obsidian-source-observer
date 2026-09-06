@@ -1,4 +1,4 @@
-import { Plugin, WorkspaceLeaf } from 'obsidian';
+import { Events, Plugin, WorkspaceLeaf } from 'obsidian';
 import {
 	DEFAULT_SETTINGS,
 	SourceObserverSettings,
@@ -9,6 +9,8 @@ import { SourceObserverView, VIEW_TYPE } from './view';
 /** Root plugin class — registers the view, ribbon icon, command, and settings tab. */
 export default class SourceObserverPlugin extends Plugin {
 	settings!: SourceObserverSettings;
+	/** Fires 'changed' after settings are persisted so open views can re-render. */
+	settingsEvents = new Events();
 
 	async onload() {
 		await this.loadSettings();
@@ -53,5 +55,6 @@ export default class SourceObserverPlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+		this.settingsEvents.trigger('changed');
 	}
 }

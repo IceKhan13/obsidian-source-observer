@@ -147,6 +147,14 @@
 	color: var(--text-muted);
 }
 
+.so-search-more {
+	display: block;
+	padding: 4px 10px;
+	font-size: 11px;
+	font-style: italic;
+	color: var(--text-faint);
+}
+
 /* ── File tree ───────────────────────────────────────────────── */
 .so-tree {
 	flex: 1;
@@ -263,6 +271,11 @@
 	color: var(--text-normal);
 }
 
+.so-change-dir {
+	font-size: 11px;
+	color: var(--text-faint);
+}
+
 /* ── Right pane ──────────────────────────────────────────────── */
 .so-main {
 	flex: 1;
@@ -314,3 +327,12 @@
 .so-diff-hunk   { color: #60a5fa; display: block; }
 .so-diff-header { color: var(--text-muted); font-weight: 600; display: block; }
 .so-diff-file   { color: var(--text-accent); display: block; }
+.so-diff-nonewline { color: var(--text-faint); font-style: italic; display: block; }
+
+.so-diff-more {
+	padding: 8px 12px;
+	font-size: 11px;
+	font-style: italic;
+	color: var(--text-faint);
+	font-family: var(--font-monospace);
+}

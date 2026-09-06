@@ -1,7 +1,7 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as path from 'path';
-import * as fs from 'fs';
+import { promises as fsp } from 'fs';
 
 const execFileAsync = promisify(execFile);
 
@@ -9,6 +9,9 @@ export interface ChangedFile {
 	code: string; // XY status code
 	file: string; // relative path
 }
+
+/** Number of diff lines appended to the DOM per render batch. */
+const DIFF_BATCH_SIZE = 500;
 
 /** Runs a git command in `cwd` and returns stdout/stderr, swallowing non-zero exit codes. */
 async function runGit(cwd: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
@@ -19,6 +22,12 @@ async function runGit(cwd: string, args: string[]): Promise<{ stdout: string; st
 		const e = err as { stdout?: string; stderr?: string };
 		return { stdout: e.stdout ?? '', stderr: e.stderr ?? String(err) };
 	}
+}
+
+/** Returns true when `repoPath` is inside a git working tree. */
+export async function isGitRepo(repoPath: string): Promise<boolean> {
+	const { stdout } = await runGit(repoPath, ['rev-parse', '--is-inside-work-tree']);
+	return stdout.trim() === 'true';
 }
 
 /**
@@ -59,7 +68,7 @@ export async function getFileDiff(repoPath: string, filePath: string): Promise<s
 
 	// Untracked / new file — render entire content as additions
 	try {
-		const content = fs.readFileSync(filePath, 'utf-8');
+		const content = await fsp.readFile(filePath, 'utf-8');
 		const lines = content.split('\n');
 		const header = `diff --git a/${rel} b/${rel}\n--- /dev/null\n+++ b/${rel}\n@@ -0,0 +1,${lines.length} @@\n`;
 		return header + lines.map((l) => '+' + l).join('\n');
@@ -68,27 +77,58 @@ export async function getFileDiff(repoPath: string, filePath: string): Promise<s
 	}
 }
 
-/** Renders a unified diff string into `container` with syntax-coloured spans. */
+function diffLineClass(line: string): string | null {
+	if (line.startsWith('\\')) return 'so-diff-nonewline';
+	if (line.startsWith('+++') || line.startsWith('---')) return 'so-diff-file';
+	if (line.startsWith('+')) return 'so-diff-add';
+	if (line.startsWith('-')) return 'so-diff-del';
+	if (line.startsWith('@@')) return 'so-diff-hunk';
+	if (line.startsWith('diff --git')) return 'so-diff-header';
+	return null;
+}
+
+/**
+ * Renders a unified diff string into `container` with syntax-coloured spans.
+ * Large diffs are appended in batches as the user scrolls instead of
+ * building one span per line up front.
+ */
 export function renderDiff(container: HTMLElement, diff: string) {
 	container.empty();
 	if (!diff.trim()) {
 		container.createEl('p', { cls: 'so-diff-clean', text: 'No diff to show' });
 		return;
 	}
+
 	const pre = container.createEl('pre', { cls: 'so-diff-pre' });
-	for (const line of diff.split('\n')) {
-		const span = pre.createEl('span');
-		span.setText(line + '\n');
-		if (line.startsWith('+++') || line.startsWith('---')) {
-			span.addClass('so-diff-file');
-		} else if (line.startsWith('+')) {
-			span.addClass('so-diff-add');
-		} else if (line.startsWith('-')) {
-			span.addClass('so-diff-del');
-		} else if (line.startsWith('@@')) {
-			span.addClass('so-diff-hunk');
-		} else if (line.startsWith('diff --git')) {
-			span.addClass('so-diff-header');
+	const lines = diff.split('\n');
+	let rendered = 0;
+
+	const sentinel = container.createDiv({ cls: 'so-diff-more' });
+
+	const renderBatch = () => {
+		const end = Math.min(rendered + DIFF_BATCH_SIZE, lines.length);
+		for (; rendered < end; rendered++) {
+			const line = lines[rendered] ?? '';
+			const span = pre.createEl('span');
+			span.setText(line + '\n');
+			const cls = diffLineClass(line);
+			if (cls) span.addClass(cls);
 		}
-	}
+		if (rendered < lines.length) {
+			sentinel.setText(`… ${lines.length - rendered} more lines (scroll to load) …`);
+		} else {
+			sentinel.remove();
+			container.removeEventListener('scroll', onScroll);
+		}
+	};
+
+	const onScroll = () => {
+		if (rendered >= lines.length) return;
+		if (container.scrollTop + container.clientHeight >= container.scrollHeight - 400) {
+			renderBatch();
+		}
+	};
+
+	renderBatch();
+	if (rendered < lines.length) container.addEventListener('scroll', onScroll, { passive: true });
 }

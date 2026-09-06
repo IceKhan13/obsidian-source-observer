@@ -1,6 +1,6 @@
-import * as fs from 'fs';
+import { promises as fsp } from 'fs';
 import * as path from 'path';
-import { EditorState } from '@codemirror/state';
+import { Compartment, EditorState } from '@codemirror/state';
 import { EditorView, lineNumbers, highlightActiveLine } from '@codemirror/view';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { tags as t } from '@lezer/highlight';
@@ -91,22 +91,32 @@ const obsidianTheme = EditorView.theme({
 	'&.cm-focused .cm-selectionBackground': { background: 'var(--text-selection)' },
 });
 
-/** Read-only CodeMirror 6 editor pane that syntax-highlights files using Obsidian CSS variables. */
+function fontTheme(fontSize: number) {
+	return EditorView.theme({ '&': { fontSize: `${fontSize}px` } });
+}
+
+/**
+ * Read-only CodeMirror 6 editor pane that syntax-highlights files using
+ * Obsidian CSS variables. A single EditorView instance is reused across
+ * files; language and font size are swapped via Compartments.
+ */
 export class CodePane {
 	private container: HTMLElement;
 	private view: EditorView | null = null;
 	private fontSize: number;
+	private language = new Compartment();
+	private font = new Compartment();
 
 	constructor(container: HTMLElement, fontSize: number) {
 		this.container = container;
 		this.fontSize = fontSize;
 	}
 
-	/** Loads `filePath` into the editor, replacing any previously open file. */
-	open(filePath: string) {
+	/** Loads `filePath` into the editor, replacing the current document in place. */
+	async open(filePath: string) {
 		let content: string;
 		try {
-			content = fs.readFileSync(filePath, 'utf-8');
+			content = await fsp.readFile(filePath, 'utf-8');
 		} catch {
 			content = '(cannot read file)';
 		}
@@ -114,22 +124,35 @@ export class CodePane {
 		const ext = path.extname(filePath).slice(1).toLowerCase();
 		const langExtension = EXT_LANG[ext]?.() ?? [];
 
-		this.view?.destroy();
+		if (!this.view) {
+			const state = EditorState.create({
+				doc: content,
+				extensions: [
+					EditorState.readOnly.of(true),
+					lineNumbers(),
+					highlightActiveLine(),
+					syntaxHighlighting(obsidianHighlight),
+					obsidianTheme,
+					this.language.of(langExtension),
+					this.font.of(fontTheme(this.fontSize)),
+				],
+			});
+			this.view = new EditorView({ state, parent: this.container });
+			return;
+		}
 
-		const state = EditorState.create({
-			doc: content,
-			extensions: [
-				EditorState.readOnly.of(true),
-				lineNumbers(),
-				highlightActiveLine(),
-				syntaxHighlighting(obsidianHighlight),
-				obsidianTheme,
-				langExtension,
-				EditorView.theme({ '&': { fontSize: `${this.fontSize}px` } }),
-			],
+		this.view.dispatch({
+			changes: { from: 0, to: this.view.state.doc.length, insert: content },
+			effects: this.language.reconfigure(langExtension),
 		});
+		this.view.scrollDOM.scrollTop = 0;
+	}
 
-		this.view = new EditorView({ state, parent: this.container });
+	/** Applies a new font size without recreating the editor. */
+	setFontSize(fontSize: number) {
+		if (this.fontSize === fontSize) return;
+		this.fontSize = fontSize;
+		this.view?.dispatch({ effects: this.font.reconfigure(fontTheme(fontSize)) });
 	}
 
 	/** Destroys the CodeMirror instance and frees its DOM nodes. */
