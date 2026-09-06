@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import { promises as fsp } from 'fs';
 import * as path from 'path';
 import { setIcon } from 'obsidian';
 
@@ -9,6 +9,9 @@ interface TreeNode {
 	children?: TreeNode[];
 	expanded?: boolean;
 }
+
+/** Maximum number of search results before showing a "more results" hint. */
+export const SEARCH_RESULTS_CAP = 200;
 
 // [lucide icon name, css colour class]
 const EXT_ICON: Record<string, [string, string]> = {
@@ -69,6 +72,7 @@ export class FileTree {
 	private onSelect: (filePath: string) => void;
 	private rootPath = '';
 	private treeRoot: TreeNode | null = null;
+	private searchSeq = 0;
 
 	constructor(
 		container: HTMLElement,
@@ -80,21 +84,35 @@ export class FileTree {
 		this.onSelect = onSelect;
 	}
 
+	/** Updates hidden-file visibility and re-renders if the value changed. */
+	setShowHidden(showHidden: boolean) {
+		if (this.showHidden === showHidden) return;
+		this.showHidden = showHidden;
+		this.treeRoot = null;
+		if (this.rootPath) void this.loadPath(this.rootPath);
+	}
+
 	/** Loads `dirPath` as the new root and re-renders the tree. */
 	async loadPath(dirPath: string) {
 		this.rootPath = dirPath;
-		this.treeRoot = this.buildNode(dirPath, true);
+		this.treeRoot = await this.buildNode(dirPath, true);
 		this.renderTree();
 	}
 
 	/** Filters the tree to files whose name contains `query`; clears filter when query is empty. */
-	search(query: string) {
+	async search(query: string) {
+		const seq = ++this.searchSeq;
 		this.container.empty();
 		if (!query.trim()) {
 			if (this.treeRoot) this.renderNode(this.treeRoot, this.container, 0);
 			return;
 		}
-		const matches = this.findFiles(this.rootPath, query.toLowerCase());
+		const { matches, truncated } = await this.findFiles(
+			this.rootPath, query.toLowerCase(), [], { count: 0 },
+		);
+		// A newer keystroke already replaced the list — drop stale results.
+		if (seq !== this.searchSeq) return;
+		this.container.empty();
 		if (matches.length === 0) {
 			this.container.createEl('span', { cls: 'so-search-empty', text: 'No results' });
 			return;
@@ -117,23 +135,38 @@ export class FileTree {
 				this.onSelect(fullPath);
 			});
 		}
+		if (truncated) {
+			this.container.createEl('span', {
+				cls: 'so-search-more',
+				text: `More than ${SEARCH_RESULTS_CAP} results — refine your search…`,
+			});
+		}
 	}
 
-	private findFiles(dir: string, query: string, results: string[] = []): string[] {
+	private async findFiles(
+		dir: string,
+		query: string,
+		results: string[],
+		state: { count: number },
+	): Promise<{ matches: string[]; truncated: boolean }> {
+		if (state.count >= SEARCH_RESULTS_CAP) return { matches: results, truncated: true };
 		let entries: string[];
-		try { entries = fs.readdirSync(dir); } catch { return results; }
+		try { entries = await fsp.readdir(dir); } catch { return { matches: results, truncated: false }; }
 		if (!this.showHidden) entries = entries.filter((e) => !e.startsWith('.'));
 		for (const name of entries) {
+			if (state.count >= SEARCH_RESULTS_CAP) return { matches: results, truncated: true };
 			const full = path.join(dir, name);
-			let stat: fs.Stats;
-			try { stat = fs.statSync(full); } catch { continue; }
-			if (stat.isDirectory()) {
-				this.findFiles(full, query, results);
+			let isDir = false;
+			try { isDir = (await fsp.stat(full)).isDirectory(); } catch { continue; }
+			if (isDir) {
+				const sub = await this.findFiles(full, query, results, state);
+				if (sub.truncated) return sub;
 			} else if (name.toLowerCase().includes(query)) {
 				results.push(full);
+				state.count++;
 			}
 		}
-		return results;
+		return { matches: results, truncated: false };
 	}
 
 	private renderTree() {
@@ -141,26 +174,24 @@ export class FileTree {
 		if (this.treeRoot) this.renderNode(this.treeRoot, this.container, 0);
 	}
 
-	private buildNode(fullPath: string, expanded = false): TreeNode {
+	private async buildNode(fullPath: string, expanded = false): Promise<TreeNode> {
 		const name = path.basename(fullPath) || fullPath;
-		let stat: fs.Stats;
-		try { stat = fs.statSync(fullPath); } catch { return { name, fullPath, isDir: false }; }
-		const isDir = stat.isDirectory();
+		let isDir = false;
+		try { isDir = (await fsp.stat(fullPath)).isDirectory(); } catch { return { name, fullPath, isDir: false }; }
 		const node: TreeNode = { name, fullPath, isDir, expanded };
-		if (isDir && expanded) node.children = this.readDir(fullPath);
+		if (isDir && expanded) node.children = await this.readDir(fullPath);
 		return node;
 	}
 
-	private readDir(dirPath: string): TreeNode[] {
+	private async readDir(dirPath: string): Promise<TreeNode[]> {
 		let entries: string[];
-		try { entries = fs.readdirSync(dirPath); } catch { return []; }
+		try { entries = await fsp.readdir(dirPath); } catch { return []; }
 		if (!this.showHidden) entries = entries.filter((e) => !e.startsWith('.'));
-		return entries
-			.map((name) => this.buildNode(path.join(dirPath, name)))
-			.sort((a, b) => {
-				if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
-				return a.name.localeCompare(b.name);
-			});
+		const nodes = await Promise.all(entries.map((name) => this.buildNode(path.join(dirPath, name))));
+		return nodes.sort((a, b) => {
+			if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+			return a.name.localeCompare(b.name);
+		});
 	}
 
 	private renderNode(node: TreeNode, parent: HTMLElement, depth: number) {
@@ -187,7 +218,14 @@ export class FileTree {
 				setIcon(iconEl, node.expanded ? 'folder-open' : 'folder');
 				if (node.expanded) {
 					childContainer.removeClass('so-tree-children-hidden');
-					if (!node.children) node.children = this.readDir(node.fullPath);
+					if (!node.children) {
+						void this.readDir(node.fullPath).then((children) => {
+							node.children = children;
+							childContainer.empty();
+							for (const child of children) this.renderNode(child, childContainer, depth + 1);
+						});
+						return;
+					}
 					childContainer.empty();
 					for (const child of node.children) this.renderNode(child, childContainer, depth + 1);
 				} else {
