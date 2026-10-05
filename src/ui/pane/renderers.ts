@@ -1,9 +1,10 @@
 import { Component, setIcon } from 'obsidian';
-import { Compartment, EditorState, Extension } from '@codemirror/state';
-import { EditorView, highlightActiveLine, keymap, lineNumbers } from '@codemirror/view';
+import { Compartment, EditorSelection, EditorState, Extension, Text } from '@codemirror/state';
+import { Decoration, EditorView, highlightActiveLine, keymap, lineNumbers } from '@codemirror/view';
 import { syntaxHighlighting } from '@codemirror/language';
 import { MergeView, unifiedMergeView } from '@codemirror/merge';
 import { gotoLine, highlightSelectionMatches, openSearchPanel, search, searchKeymap } from '@codemirror/search';
+import type { LineRange } from '../../links/sourceLink';
 import type { DiffLayout } from '../../settings';
 import { diffStats, DiffStats } from '../editor/diffStats';
 import { languageFor } from '../editor/languages';
@@ -65,14 +66,39 @@ function baseEditorExtensions(): Extension[] {
 	];
 }
 
+/** `lines` clamped to the document, or null when it starts past the end. */
+function clampLines(doc: Text, lines: LineRange): LineRange | null {
+	if (lines.from > doc.lines) return null;
+	return { from: lines.from, to: Math.min(lines.to, doc.lines) };
+}
+
+const linkedLine = Decoration.line({ class: 'so-linked-line' });
+
+function linkedLinesHighlight(doc: Text, lines: LineRange | null): Extension {
+	const range = lines && clampLines(doc, lines);
+	if (!range) return [];
+	const marks = [];
+	for (let n = range.from; n <= range.to; n++) marks.push(linkedLine.range(doc.line(n).from));
+	return EditorView.decorations.of(Decoration.set(marks));
+}
+
+/** What a link or code block made from the editor should cover. */
+export interface EditorSelectionInfo {
+	/** Selected lines, or null for the whole file when nothing is selected. */
+	lines: LineRange | null;
+	text: string;
+}
+
 /**
  * Read-only, syntax-highlighted file view. The CodeMirror instance is reused
- * across files; language and font size are swapped via compartments.
+ * across files; language, font size and linked-line highlights are swapped
+ * via compartments.
  */
 export class CodeRenderer extends PaneRenderer {
 	private view: EditorView | null = null;
 	private language = new Compartment();
 	private font = new Compartment();
+	private highlight = new Compartment();
 
 	constructor(parent: HTMLElement, private fontSize: number) {
 		super(parent, 'so-code-view');
@@ -86,6 +112,7 @@ export class CodeRenderer extends PaneRenderer {
 					...baseEditorExtensions(),
 					this.language.of([]),
 					this.font.of(fontTheme(this.fontSize)),
+					this.highlight.of([]),
 				],
 			}),
 		});
@@ -99,18 +126,49 @@ export class CodeRenderer extends PaneRenderer {
 
 	editor() { return this.view; }
 
-	/** Replaces the document in place; scrolls back to the top unless `keepScroll`. */
-	setDocument(text: string, fileName: string, keepScroll: boolean) {
+	/**
+	 * Replaces the document in place and highlights `lines`, if given. Scrolls
+	 * to the highlighted lines, or back to the top, unless `keepScroll`.
+	 */
+	setDocument(text: string, fileName: string, keepScroll: boolean, lines: LineRange | null = null) {
 		const view = this.view;
 		if (!view) return;
 		const { scrollTop, scrollLeft } = view.scrollDOM;
+		const doc = Text.of(text.split(/\r\n?|\n/));
+		const range = lines && clampLines(doc, lines);
+		// Selecting the linked lines lets "Copy link" reproduce the same link.
+		const selection = range && !keepScroll
+			? EditorSelection.range(doc.line(range.from).from, doc.line(range.to).to)
+			: EditorSelection.cursor(0);
 		view.dispatch({
-			changes: { from: 0, to: view.state.doc.length, insert: text },
-			effects: this.language.reconfigure(languageFor(fileName)),
-			selection: { anchor: 0 },
+			changes: { from: 0, to: view.state.doc.length, insert: doc },
+			effects: [
+				this.language.reconfigure(languageFor(fileName)),
+				this.highlight.reconfigure(linkedLinesHighlight(doc, lines)),
+			],
+			selection,
 		});
+		if (range && !keepScroll) {
+			view.dispatch({ effects: EditorView.scrollIntoView(selection.from, { y: 'center' }) });
+			return;
+		}
 		view.scrollDOM.scrollTop = keepScroll ? scrollTop : 0;
 		view.scrollDOM.scrollLeft = keepScroll ? scrollLeft : 0;
+	}
+
+	/** The selected whole lines, or the whole file when the selection is empty. */
+	selection(): EditorSelectionInfo | null {
+		const view = this.view;
+		if (!view) return null;
+		const { doc } = view.state;
+		const { from, to, empty } = view.state.selection.main;
+		if (empty) return { lines: null, text: doc.toString() };
+		const first = doc.lineAt(from);
+		// A selection ending at the start of a line (e.g. a dragged or triple-click
+		// selection) does not include that line.
+		let last = doc.lineAt(to);
+		if (to === last.from && to > from) last = doc.lineAt(to - 1);
+		return { lines: { from: first.number, to: last.number }, text: doc.sliceString(first.from, last.to) };
 	}
 
 	setFontSize(fontSize: number) {

@@ -5,14 +5,24 @@ import type { ChangeEntry, ChangeGroup } from '../../git/status';
 import { loadDiffSides } from '../../git/diffSources';
 import { formatBytes, LoadedContent, readViewableFile } from '../../utils/content';
 import { LatestRequest } from '../../utils/latest';
+import type { LineRange } from '../../links/sourceLink';
 import type { DiffLayout } from '../../settings';
-import { CodeRenderer, DiffRenderer, MessageRenderer, PaneRenderer } from './renderers';
+import { CodeRenderer, DiffRenderer, EditorSelectionInfo, MessageRenderer, PaneRenderer } from './renderers';
 
 export type PaneTarget =
-	| { type: 'file'; absPath: string; label: string }
+	| { type: 'file'; absPath: string; label: string; lines: LineRange | null }
 	| { type: 'diff'; repo: GitRepo; entry: ChangeEntry; label: string };
 
-interface PaneAction { icon: string; label: string; run: () => void }
+interface PaneAction { icon: string; label: string; run: (evt: MouseEvent) => void }
+
+export interface ContentPaneOptions {
+	fontSize: number;
+	diffLayout?: DiffLayout;
+	/** Called when the user switches the diff layout from the header. */
+	onDiffLayoutChange?: (layout: DiffLayout) => void;
+	/** Shows the copy-link menu for the open file; the header button is hidden without it. */
+	onLinkMenu?: (evt: MouseEvent) => void;
+}
 
 const GROUP_LABEL: Record<ChangeGroup, string> = {
 	staged: 'staged',
@@ -64,14 +74,13 @@ export class ContentPane extends Component {
 	/** Identity of what is currently rendered, used to skip no-op reloads. */
 	private signature = '';
 
-	constructor(
-		parent: HTMLElement,
-		private fontSize: number,
-		private diffLayout: DiffLayout = 'unified',
-		/** Called when the user switches the diff layout from the header. */
-		private onDiffLayoutChange?: (layout: DiffLayout) => void,
-	) {
+	private fontSize: number;
+	private diffLayout: DiffLayout;
+
+	constructor(parent: HTMLElement, private opts: ContentPaneOptions) {
 		super();
+		this.fontSize = opts.fontSize;
+		this.diffLayout = opts.diffLayout ?? 'unified';
 		this.headerEl = parent.createDiv({ cls: 'so-pane-header' });
 		this.labelEl = this.headerEl.createDiv({ cls: 'so-path-label' });
 		this.statsEl = this.headerEl.createDiv({ cls: 'so-pane-stats' });
@@ -94,8 +103,16 @@ export class ContentPane extends Component {
 		this.mount(new MessageRenderer(this.bodyEl, 'code-2', text));
 	}
 
-	showFile(absPath: string, label: string) {
-		return this.show({ type: 'file', absPath, label });
+	/** Shows a file, highlighting and scrolling to `lines` if given. */
+	showFile(absPath: string, label: string, lines: LineRange | null = null) {
+		return this.show({ type: 'file', absPath, label, lines });
+	}
+
+	/** The file shown as code (not a diff) and its selection, for links. */
+	currentFile(): { absPath: string; selection: EditorSelectionInfo } | null {
+		if (this.target?.type !== 'file' || !(this.current instanceof CodeRenderer)) return null;
+		const selection = this.current.selection();
+		return selection ? { absPath: this.target.absPath, selection } : null;
 	}
 
 	showDiff(repo: GitRepo, entry: ChangeEntry, label: string) {
@@ -187,14 +204,19 @@ export class ContentPane extends Component {
 		const find: PaneAction = { icon: 'search', label: 'Find in file', run: () => { this.openSearch(); } };
 
 		if (plan.kind === 'code') {
-			this.setHeader(label, null, [find]);
+			const actions: PaneAction[] = [];
+			const onLinkMenu = this.opts.onLinkMenu;
+			if (onLinkMenu) actions.push({ icon: 'link', label: 'Copy link', run: onLinkMenu });
+			actions.push(find);
+			this.setHeader(label, null, actions);
+			const lines = target.type === 'file' ? target.lines : null;
 			// Reuse the editor between files instead of rebuilding it.
 			if (this.current instanceof CodeRenderer) {
-				this.current.setDocument(plan.text, plan.fileName, keepScroll);
+				this.current.setDocument(plan.text, plan.fileName, keepScroll, lines);
 			} else {
 				const code = new CodeRenderer(this.bodyEl, this.fontSize);
 				this.mount(code);
-				code.setDocument(plan.text, plan.fileName, false);
+				code.setDocument(plan.text, plan.fileName, false, lines);
 			}
 			return;
 		}
@@ -210,7 +232,7 @@ export class ContentPane extends Component {
 					label: next === 'split' ? 'Show side by side' : 'Show unified',
 					run: () => {
 						this.setDiffLayout(next);
-						this.onDiffLayoutChange?.(next);
+						this.opts.onDiffLayoutChange?.(next);
 					},
 				},
 				find,
@@ -259,7 +281,7 @@ export class ContentPane extends Component {
 				attr: { 'aria-label': action.label },
 			});
 			setIcon(btn, action.icon);
-			btn.addEventListener('click', action.run);
+			btn.addEventListener('click', (evt) => action.run(evt));
 		}
 	}
 }

@@ -15,6 +15,9 @@ A lightweight codebase viewer for [Obsidian](https://obsidian.md). Browse any fo
 - **Subfolders of a repository** — open any folder inside a repo; only changes within that folder are shown.
 - **Search** — file-name search with exact and prefix matches ranked first (respects `.gitignore` in repositories; type a `/` to match paths) and a filter for changed files.
 - **Keyboard navigation** — arrow keys, Home/End, Enter, and Left/Right to collapse and expand folders.
+- **Links to code** — copy a link to a file or the selected lines; opening it in a note jumps to the file in Source Observer with those lines highlighted.
+- **Live code embeds** — embed a file or a range of lines in a note. The excerpt is syntax-highlighted, keeps its real line numbers, and updates when the file changes.
+- **Copy as code block** — paste a static, fenced copy of the selection into a note, followed by a link back to the source.
 - **Context menu** — right-click a file, folder or change to copy its path or relative path, reveal it in Finder or the system file manager, or open it in its default app.
 - **Recent folders** and a resizable sidebar.
 - **Safe with large and binary files** — files over 2 MB and binary files show a message instead of being loaded.
@@ -25,12 +28,31 @@ A lightweight codebase viewer for [Obsidian](https://obsidian.md). Browse any fo
 2. Select the folder button at the top of the sidebar, then **Browse…**, **Enter path…**, or a recent folder. You can also run **Source Observer: Open folder…**.
 3. Select a file in **Files** to view it, or a file in **Changes** to view its diff. In a diff, use the icons in the header to switch between unified and side-by-side layout, or to open the full file. The default layout is in **Settings → Source Observer → Diff layout**.
 4. Press <kbd>Mod</kbd>+<kbd>F</kbd>, or select the search icon in the header, to find text in the open file or diff. Run **Source Observer: Go to line** to jump to a line; both commands can be given hotkeys in **Settings → Hotkeys**.
-5. Use the search icon in each section header to filter; press <kbd>Esc</kbd> to close the search.
-6. Drag the border between the sidebar and the viewer to resize it; double-click to reset.
+5. To reference code in a note, select lines in a file (or select nothing for the whole file), then select the link icon in the header and choose **Copy link**, **Copy embed** or **Copy as code block**, and paste into a note. The same actions are available as commands, and **Copy link** and **Copy embed** are in the right-click menu of every file.
+6. Use the search icon in each section header to filter; press <kbd>Esc</kbd> to close the search.
+7. Drag the border between the sidebar and the viewer to resize it; double-click to reset.
+
+### Embeds
+
+An embed is a code block with the `source-observer` language:
+
+````markdown
+```source-observer
+folder: /Users/me/code/my-project
+file: src/server.ts
+lines: 40-75
+```
+````
+
+- `file` is required. It is relative to `folder`, or an absolute path (`~` is expanded), in which case `folder` can be left out.
+- `lines` is optional: a single line (`12`) or a range (`40-75`). Without it the whole file is embedded.
+- Select the header of an embed to open the file in Source Observer at those lines.
+
+Links have the form `obsidian://source-observer?folder=…&file=…&lines=…`. Both links and embeds use absolute paths, so they work on the computer they were created on.
 
 ## Privacy
 
-Source Observer works entirely offline. It reads files from the folder you open and runs your local `git` executable (read-only commands such as `status`, `ls-files` and `cat-file`, with `--no-optional-locks` so it never writes to your repository). It makes no network requests and collects no data. **Reveal in Finder** and **Open in default app** hand the selected path to your operating system.
+Source Observer works entirely offline. It reads files from the folder you open and runs your local `git` executable (read-only commands such as `status`, `ls-files` and `cat-file`, with `--no-optional-locks` so it never writes to your repository). It makes no network requests and collects no data. Embeds read the files they name directly from disk, and opening an `obsidian://source-observer` link opens that folder in the viewer. **Reveal in Finder** and **Open in default app** hand the selected path to your operating system.
 
 ## Installation
 
@@ -53,8 +75,12 @@ npm test       # unit, git integration and DOM tests (vitest)
 
 ```
 src/
-  main.ts                     plugin lifecycle, commands
+  main.ts                     plugin lifecycle
+  commands.ts                 command palette commands
   settings.ts                 settings model, defaults, validation
+  links/
+    sourceLink.ts             link, embed and code block formats; embed parsing
+    register.ts               obsidian:// handler and code block processor
   git/
     GitRepo.ts                resolves root/git dir/prefix; runs git with --no-optional-locks
     status.ts                 pure parser for `git status --porcelain=v2`
@@ -68,6 +94,7 @@ src/
     sidebar/                  Files and Changes sections, tree, keyboard navigation
     pane/                     content pane and its renderers (code, diff, message)
     editor/                   CodeMirror theme, languages, diff stats
+    embed/                    live code embeds rendered inside notes
     fileMenu.ts               right-click menu for files, folders and changes
   utils/                      file reading, icons, paths, request tokens, OS integration
 ```

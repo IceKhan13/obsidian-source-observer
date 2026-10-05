@@ -1,12 +1,14 @@
-import { debounce, ItemView, Notice, Scope, setIcon, WorkspaceLeaf } from 'obsidian';
+import { debounce, ItemView, Menu, Notice, Scope, setIcon, WorkspaceLeaf } from 'obsidian';
 import * as path from 'path';
 import type SourceObserverPlugin from '../main';
 import { addRecentFolder, clamp, DEFAULT_SETTINGS, SIDEBAR_WIDTH_RANGE } from '../settings';
 import { ChangeEntry, ChangeKind, primaryKind } from '../git/status';
+import { COPY_FORMATS, CopyFormat, describeLocation, formatForCopy, LineRange, SourceLocation } from '../links/sourceLink';
 import { RepoSnapshot, RepoState } from '../services/RepoState';
 import { RepoWatcher } from '../services/RepoWatcher';
 import { isDirectory, normalizeFolderInput } from '../utils/paths';
-import { showFileMenu } from './fileMenu';
+import { copyToClipboard } from '../utils/system';
+import { FileMenuItem, showFileMenu } from './fileMenu';
 import { promptForFolder, showFolderMenu } from './folderPicker';
 import { ContentPane } from './pane/ContentPane';
 import { ChangesSection } from './sidebar/ChangesSection';
@@ -18,6 +20,12 @@ export const VIEW_TYPE = 'source-observer';
 const PANE_RELOAD_DEBOUNCE_MS = 250;
 /** Sidebar width change per arrow-key press on the resize handle, in px. */
 const RESIZE_KEY_STEP = 16;
+
+const COPIED_NOTICE: Record<CopyFormat, string> = {
+	link: 'Copied link to',
+	embed: 'Copied embed of',
+	code: 'Copied code block from',
+};
 
 /**
  * Two-column layout: Files and Changes sections on the left, the content
@@ -76,7 +84,8 @@ export class SourceObserverView extends ItemView {
 			showHidden: settings.showHidden,
 			onOpenFile: (absPath, label) => { void this.pane.showFile(absPath, label); },
 			onContextMenu: (evt, absPath, relPath, isDir) => {
-				showFileMenu(evt, { absPath, relPath, isDir, exists: true });
+				const extra = isDir ? [] : [this.fileLinkItems(absPath)];
+				showFileMenu(evt, { absPath, relPath, isDir, exists: true }, extra);
 			},
 		}));
 		this.changes = this.addChild(new ChangesSection(sidebar, {
@@ -95,9 +104,14 @@ export class SourceObserverView extends ItemView {
 			attr: { role: 'separator', 'aria-orientation': 'vertical', 'aria-label': 'Resize sidebar', tabindex: '0' },
 		}), sidebar);
 		const main = root.createDiv({ cls: 'so-main' });
-		this.pane = this.addChild(new ContentPane(main, settings.fontSize, settings.diffLayout, (layout) => {
-			this.plugin.settings.diffLayout = layout;
-			void this.plugin.saveSettings();
+		this.pane = this.addChild(new ContentPane(main, {
+			fontSize: settings.fontSize,
+			diffLayout: settings.diffLayout,
+			onDiffLayoutChange: (layout) => {
+				this.plugin.settings.diffLayout = layout;
+				void this.plugin.saveSettings();
+			},
+			onLinkMenu: (evt) => this.showLinkMenu(evt),
 		}));
 
 		// ── Change detection ─────────────────────────────────────────
@@ -153,6 +167,31 @@ export class SourceObserverView extends ItemView {
 		return this.pane.goToLine();
 	}
 
+	/** True when a file is shown as code, so a link to it or its selection can be copied. */
+	canCopyLink(): boolean {
+		return !!this.folder && !!this.pane.currentFile();
+	}
+
+	/** Copies a link, embed or code block for the shown file, limited to the selected lines. */
+	copyFromEditor(format: CopyFormat) {
+		const file = this.pane.currentFile();
+		if (!file || !this.folder) return;
+		const loc = this.locationFor(file.absPath, file.selection.lines);
+		void copyToClipboard(formatForCopy(format, loc, file.selection.text), `${COPIED_NOTICE[format]} ${describeLocation(loc)}`);
+	}
+
+	/** Opens a file from a link or embed, switching to its folder first if needed. */
+	async openLocation(loc: SourceLocation) {
+		const folder = normalizeFolderInput(loc.folder);
+		if (folder !== this.folder) {
+			await this.openFolder(folder, true);
+			if (this.folder !== folder) return; // not found; openFolder showed a notice
+		}
+		const absPath = path.resolve(folder, loc.file);
+		this.files.select(absPath);
+		await this.pane.showFile(absPath, path.relative(folder, absPath) || path.basename(absPath), loc.lines);
+	}
+
 	/** Opens `input` as the browsed folder; `remember` stores it as last/recent. */
 	async openFolder(input: string, remember: boolean) {
 		const folder = normalizeFolderInput(input);
@@ -183,9 +222,36 @@ export class SourceObserverView extends ItemView {
 		const absPath = repo.absPath(entry.file.path);
 		const exists = entry.kind !== 'deleted';
 		const extra = exists
-			? [{ title: 'Open file', icon: 'file-text', run: () => { void this.pane.showFile(absPath, relPath); } }]
+			? [
+				[{ title: 'Open file', icon: 'file-text', run: () => { void this.pane.showFile(absPath, relPath); } }],
+				this.fileLinkItems(absPath),
+			]
 			: [];
 		showFileMenu(evt, { absPath, relPath, isDir: false, exists }, extra);
+	}
+
+	/** A location in the opened folder, with a '/'-separated relative path. */
+	private locationFor(absPath: string, lines: LineRange | null): SourceLocation {
+		return { folder: this.folder, file: path.relative(this.folder, absPath).split(path.sep).join('/'), lines };
+	}
+
+	/** "Copy link" and "Copy embed" for a whole file, for the sidebar context menus. */
+	private fileLinkItems(absPath: string): FileMenuItem[] {
+		const loc = this.locationFor(absPath, null);
+		return COPY_FORMATS.filter((f) => f.format !== 'code').map(({ format, title, icon }) => ({
+			title,
+			icon,
+			run: () => { void copyToClipboard(formatForCopy(format, loc), `${COPIED_NOTICE[format]} ${loc.file}`); },
+		}));
+	}
+
+	/** The header's link button: copy the shown file or selection in each format. */
+	private showLinkMenu(evt: MouseEvent) {
+		const menu = new Menu();
+		for (const { format, title, icon } of COPY_FORMATS) {
+			menu.addItem((item) => item.setTitle(title).setIcon(icon).onClick(() => this.copyFromEditor(format)));
+		}
+		menu.showAtMouseEvent(evt);
 	}
 
 	private refreshAll() {

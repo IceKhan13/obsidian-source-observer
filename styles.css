@@ -405,3 +405,39 @@
 .so-diff-split .cm-mergeViewEditor + .cm-mergeViewEditor {
 	border-left: 1px solid var(--background-modifier-border);
 }
+
+/* ── Code embeds in notes ───────────────────────────────────────── */
+.so-embed {
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--code-radius, var(--radius-s));
+	overflow: hidden;
+	background: var(--code-background);
+}
+.so-embed-header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 10px;
+	border-bottom: 1px solid var(--background-modifier-border);
+	background: var(--background-secondary);
+	color: var(--text-muted);
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller);
+	cursor: pointer;
+}
+.so-embed-header:hover,
+.so-embed-header:focus-visible { color: var(--text-accent); }
+.so-embed-icon { display: flex; }
+.so-embed-icon svg { width: 14px; height: 14px; }
+.so-embed-label {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.so-embed-message {
+	padding: 8px 12px;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+.so-embed-error { color: var(--text-error); }
