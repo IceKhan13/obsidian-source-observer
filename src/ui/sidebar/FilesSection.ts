@@ -101,6 +101,11 @@ export class FilesSection extends Component {
 		if (this.query()) void this.search();
 	}
 
+	/** Highlights `absPath` in the tree if it is rendered. */
+	select(absPath: string) {
+		this.tree.select(absPath);
+	}
+
 	setDecorations(kinds: Map<string, ChangeKind>, dirtyDirs: Set<string>) {
 		this.tree.setDecorations(kinds, dirtyDirs);
 	}

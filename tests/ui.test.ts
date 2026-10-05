@@ -6,6 +6,7 @@ import { GitRepo } from '../src/git/GitRepo';
 import { ChangeEntry, groupChanges } from '../src/git/status';
 import type { RepoSnapshot } from '../src/services/RepoState';
 import { ContentPane } from '../src/ui/pane/ContentPane';
+import { CodeEmbed, sliceLines } from '../src/ui/embed/CodeEmbed';
 import { fileMenuGroups, showFileMenu } from '../src/ui/fileMenu';
 import { ChangesSection } from '../src/ui/sidebar/ChangesSection';
 import { FileTree } from '../src/ui/sidebar/FileTree';
@@ -43,7 +44,7 @@ describe('ContentPane', () => {
 	it('fully replaces a diff when a file is opened (regression: diff stayed above the editor)', async () => {
 		const { root, repo, entry } = await repoWithChange();
 		const { owner, el } = host();
-		const pane = owner.addChild(new ContentPane(el, 13));
+		const pane = owner.addChild(new ContentPane(el, { fontSize: 13 }));
 		const body = el.querySelector('.so-pane') as HTMLElement;
 
 		await pane.showDiff(repo, entry, 'big.ts');
@@ -61,7 +62,7 @@ describe('ContentPane', () => {
 	it('never lets a slower earlier load overwrite a newer one (regression: label and content disagreed)', async () => {
 		const { root, repo, entry } = await repoWithChange();
 		const { owner, el } = host();
-		const pane = owner.addChild(new ContentPane(el, 13));
+		const pane = owner.addChild(new ContentPane(el, { fontSize: 13 }));
 
 		// The diff needs several git calls; the file read is a single fs call.
 		const slow = pane.showDiff(repo, entry, 'big.ts');
@@ -79,7 +80,7 @@ describe('ContentPane', () => {
 		write(dir, 'a.py', 'print(1)\n');
 		write(dir, 'b.go', 'package main\n');
 		const { owner, el } = host();
-		const pane = owner.addChild(new ContentPane(el, 13));
+		const pane = owner.addChild(new ContentPane(el, { fontSize: 13 }));
 
 		await pane.showFile(path.join(dir, 'a.py'), 'a.py');
 		const editor = el.querySelector('.cm-editor');
@@ -95,7 +96,7 @@ describe('ContentPane', () => {
 		const { repo, entry } = await repoWithChange();
 		const { owner, el } = host();
 		const layouts: string[] = [];
-		const pane = owner.addChild(new ContentPane(el, 13, 'split', (l) => layouts.push(l)));
+		const pane = owner.addChild(new ContentPane(el, { fontSize: 13, diffLayout: 'split', onDiffLayoutChange: (l) => layouts.push(l) }));
 
 		await pane.showDiff(repo, entry, 'big.ts');
 		expect(el.querySelectorAll('.so-diff-split .cm-mergeView .cm-editor')).toHaveLength(2);
@@ -119,7 +120,7 @@ describe('ContentPane', () => {
 		cleanup.push(dir);
 		write(dir, 'a.ts', 'const needle = 1;\n');
 		const { owner, el } = host();
-		const pane = owner.addChild(new ContentPane(el, 13));
+		const pane = owner.addChild(new ContentPane(el, { fontSize: 13 }));
 
 		expect(pane.hasEditor()).toBe(false);
 		expect(pane.openSearch()).toBe(false);
@@ -132,12 +133,43 @@ describe('ContentPane', () => {
 		expect(el.querySelector('.cm-goto-line, .cm-gotoLine')).not.toBeNull();
 	});
 
+	it('highlights and selects linked lines, and reports the selection for links', async () => {
+		const dir = tempDir();
+		cleanup.push(dir);
+		write(dir, 'a.ts', Array.from({ length: 30 }, (_, i) => `line ${i + 1}`).join('\n'));
+		const { owner, el } = host();
+		const pane = owner.addChild(new ContentPane(el, { fontSize: 13, onLinkMenu: () => {} }));
+
+		await pane.showFile(path.join(dir, 'a.ts'), 'a.ts', { from: 3, to: 5 });
+		expect(el.querySelectorAll('.so-linked-line')).toHaveLength(3);
+		expect(pane.currentFile()?.selection).toEqual({ lines: { from: 3, to: 5 }, text: 'line 3\nline 4\nline 5' });
+		expect(el.querySelector('.so-pane-action[aria-label="Copy link"]')).not.toBeNull();
+
+		// Opening the file normally clears the highlight and links to the whole file.
+		await pane.showFile(path.join(dir, 'a.ts'), 'a.ts');
+		expect(el.querySelectorAll('.so-linked-line')).toHaveLength(0);
+		expect(pane.currentFile()?.selection.lines).toBeNull();
+	});
+
+	it('clamps linked lines past the end of the file', async () => {
+		const dir = tempDir();
+		cleanup.push(dir);
+		write(dir, 'a.ts', 'one\ntwo');
+		const { owner, el } = host();
+		const pane = owner.addChild(new ContentPane(el, { fontSize: 13 }));
+		await pane.showFile(path.join(dir, 'a.ts'), 'a.ts', { from: 2, to: 99 });
+		expect(el.querySelectorAll('.so-linked-line')).toHaveLength(1);
+		await pane.showFile(path.join(dir, 'a.ts'), 'a.ts', { from: 50, to: 60 });
+		expect(el.querySelectorAll('.so-linked-line')).toHaveLength(0);
+		expect(el.querySelector('.so-pane-action[aria-label="Copy link"]')).toBeNull();
+	});
+
 	it('shows a message instead of loading binary files', async () => {
 		const dir = tempDir();
 		cleanup.push(dir);
 		write(dir, 'img.png', Buffer.from([0x89, 0x50, 0, 0, 1]));
 		const { owner, el } = host();
-		const pane = owner.addChild(new ContentPane(el, 13));
+		const pane = owner.addChild(new ContentPane(el, { fontSize: 13 }));
 		await pane.showFile(path.join(dir, 'img.png'), 'img.png');
 		expect(el.querySelectorAll('.cm-editor')).toHaveLength(0);
 		expect(el.querySelector('.so-message-text')?.textContent).toBe('Binary file');
@@ -174,6 +206,58 @@ describe('ChangesSection', () => {
 	});
 });
 
+describe('CodeEmbed', () => {
+	const until = async (check: () => boolean, ms = 3000) => {
+		for (const start = Date.now(); !check() && Date.now() - start < ms;) await new Promise((r) => setTimeout(r, 25));
+	};
+
+	it('slices lines, ignoring a trailing newline', () => {
+		expect(sliceLines('a\nb\nc\n', 2, 9)).toEqual({ text: 'b\nc', to: 3 });
+		expect(sliceLines('a\nb\n', 3, 4)).toBeNull();
+	});
+
+	it('renders the embedded lines with their real line numbers and opens on click', async () => {
+		const dir = tempDir();
+		cleanup.push(dir);
+		write(dir, 'src/a.ts', Array.from({ length: 30 }, (_, i) => `const v${i + 1} = ${i + 1};`).join('\n'));
+		const { owner, el } = host();
+		const location = { folder: dir, file: 'src/a.ts', lines: { from: 11, to: 12 } };
+		const opened: unknown[] = [];
+		owner.addChild(new CodeEmbed(el, { absPath: path.join(dir, 'src/a.ts'), location }, (l) => opened.push(l)));
+
+		await until(() => !!el.querySelector('.cm-content'));
+		expect(el.querySelector('.cm-content')?.textContent).toBe('const v11 = 11;const v12 = 12;');
+		expect(el.querySelector('.cm-lineNumbers')?.textContent).toContain('11');
+		expect(el.querySelector('.so-embed-label')?.textContent).toBe('src/a.ts:11-12');
+
+		el.querySelector<HTMLElement>('.so-embed-header')?.click();
+		expect(opened).toEqual([location]);
+	});
+
+	it('updates when the file changes and explains missing files', async () => {
+		const dir = tempDir();
+		cleanup.push(dir);
+		write(dir, 'a.ts', 'before');
+		const { owner, el } = host();
+		const embed = owner.addChild(new CodeEmbed(el, {
+			absPath: path.join(dir, 'a.ts'),
+			location: { folder: dir, file: 'a.ts', lines: null },
+		}, () => {}));
+		await until(() => el.querySelector('.cm-content')?.textContent === 'before');
+
+		write(dir, 'a.ts', 'after');
+		await until(() => el.querySelector('.cm-content')?.textContent === 'after');
+		expect(el.querySelector('.cm-content')?.textContent).toBe('after');
+
+		remove(path.join(dir, 'a.ts'));
+		await until(() => !!el.querySelector('.so-embed-message'));
+		expect(el.querySelector('.so-embed-message')?.textContent).toContain('File not found');
+		expect(el.querySelectorAll('.cm-editor')).toHaveLength(0);
+
+		owner.removeChild(embed);
+	});
+});
+
 describe('file menu', () => {
 	const file = { absPath: '/repo/src/a.ts', relPath: 'src/a.ts', isDir: false, exists: true };
 	const titles = (groups: ReturnType<typeof fileMenuGroups>) => groups.map((g) => g.map((i) => i.title));
@@ -192,7 +276,7 @@ describe('file menu', () => {
 
 	it('puts extra items first and separates groups', () => {
 		const evt = new MouseEvent('contextmenu', { cancelable: true });
-		showFileMenu(evt, file, [{ title: 'Open file', icon: 'file-text', run: () => {} }]);
+		showFileMenu(evt, file, [[{ title: 'Open file', icon: 'file-text', run: () => {} }]]);
 		expect(evt.defaultPrevented).toBe(true);
 		expect(Menu.last?.items.map((i) => i?.title ?? '---')).toEqual([
 			'Open file', '---', 'Copy path', 'Copy relative path', '---', 'Show in system explorer', 'Open in default app',

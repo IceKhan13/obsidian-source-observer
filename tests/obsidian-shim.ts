@@ -197,3 +197,7 @@ export class Menu {
 	addSeparator() { this.items.push(null); return this; }
 	showAtMouseEvent() { Menu.last = this; return this; }
 }
+
+export class MarkdownRenderChild extends Component {
+	constructor(public containerEl: HTMLElement) { super(); }
+}

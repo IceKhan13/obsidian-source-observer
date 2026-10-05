@@ -1,9 +1,12 @@
 import { Events, Plugin, WorkspaceLeaf } from 'obsidian';
+import { registerCommands } from './commands';
+import { registerLinks } from './links/register';
+import type { SourceLocation } from './links/sourceLink';
 import { sanitizeSettings, SourceObserverSettings } from './settings';
 import { SourceObserverSettingTab } from './ui/SettingTab';
 import { SourceObserverView, VIEW_TYPE } from './ui/SourceObserverView';
 
-/** Root plugin class — registers the view, ribbon icon, commands, and settings tab. */
+/** Root plugin class — registers the view, ribbon icon, commands, links, and settings tab. */
 export default class SourceObserverPlugin extends Plugin {
 	settings!: SourceObserverSettings;
 	/** Fires 'changed' after settings are persisted so open views can re-render. */
@@ -16,31 +19,8 @@ export default class SourceObserverPlugin extends Plugin {
 
 		this.addRibbonIcon('code-2', 'Source observer', () => { void this.activateView(); });
 
-		this.addCommand({
-			id: 'open',
-			name: 'Open',
-			callback: () => { void this.activateView(); },
-		});
-
-		this.addCommand({
-			id: 'open-folder',
-			name: 'Open folder…',
-			callback: () => {
-				void this.activateView().then((view) => view?.promptForFolder());
-			},
-		});
-
-		this.addCommand({
-			id: 'find-in-file',
-			name: 'Find in file',
-			checkCallback: (checking) => this.withEditor(checking, (view) => view.findInFile()),
-		});
-
-		this.addCommand({
-			id: 'go-to-line',
-			name: 'Go to line',
-			checkCallback: (checking) => this.withEditor(checking, (view) => view.goToLine()),
-		});
+		registerCommands(this);
+		registerLinks(this);
 
 		this.addSettingTab(new SourceObserverSettingTab(this.app, this));
 	}
@@ -57,12 +37,10 @@ export default class SourceObserverPlugin extends Plugin {
 		return leaf.view instanceof SourceObserverView ? leaf.view : null;
 	}
 
-	/** Runs `action` on the active view when it shows a file or diff; for `checkCallback`. */
-	private withEditor(checking: boolean, action: (view: SourceObserverView) => void): boolean {
-		const view = this.app.workspace.getActiveViewOfType(SourceObserverView);
-		if (!view?.hasEditor()) return false;
-		if (!checking) action(view);
-		return true;
+	/** Opens a file (and lines) from a link or embed, switching folders if needed. */
+	async openLocation(loc: SourceLocation) {
+		const view = await this.activateView();
+		await view?.openLocation(loc);
 	}
 
 	async loadSettings() {

@@ -19,9 +19,9 @@ export interface FileMenuItem {
 
 /**
  * Builds the menu as groups of items, separated in the rendered menu.
- * `extra` items, e.g. "Open file" for a change, form the first group.
+ * `extra` groups, e.g. "Open file" for a change, come first.
  */
-export function fileMenuGroups(target: FileMenuTarget, extra: FileMenuItem[] = []): FileMenuItem[][] {
+export function fileMenuGroups(target: FileMenuTarget, extra: FileMenuItem[][] = []): FileMenuItem[][] {
 	const copy: FileMenuItem[] = [
 		{ title: 'Copy path', icon: 'copy', run: () => { void copyToClipboard(target.absPath); } },
 		{ title: 'Copy relative path', icon: 'copy', run: () => { void copyToClipboard(target.relPath); } },
@@ -41,11 +41,11 @@ export function fileMenuGroups(target: FileMenuTarget, extra: FileMenuItem[] = [
 			});
 		}
 	}
-	return [extra, copy, system].filter((group) => group.length > 0);
+	return [...extra, copy, system].filter((group) => group.length > 0);
 }
 
 /** Shows the context menu for `target` at the mouse position. */
-export function showFileMenu(evt: MouseEvent, target: FileMenuTarget, extra: FileMenuItem[] = []) {
+export function showFileMenu(evt: MouseEvent, target: FileMenuTarget, extra: FileMenuItem[][] = []) {
 	evt.preventDefault();
 	const menu = new Menu();
 	fileMenuGroups(target, extra).forEach((group, i) => {

@@ -12,9 +12,11 @@ export async function openInDefaultApp(absPath: string) {
 	if (error) new Notice(`Cannot open file: ${error}`);
 }
 
-export async function copyToClipboard(text: string) {
+/** Copies `text`, confirming with `notice` if given. */
+export async function copyToClipboard(text: string, notice?: string) {
 	try {
 		await navigator.clipboard.writeText(text);
+		if (notice) new Notice(notice);
 	} catch {
 		new Notice('Cannot copy to the clipboard');
 	}
