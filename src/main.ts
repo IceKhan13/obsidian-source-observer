@@ -1,12 +1,9 @@
 import { Events, Plugin, WorkspaceLeaf } from 'obsidian';
-import {
-	DEFAULT_SETTINGS,
-	SourceObserverSettings,
-	SourceObserverSettingTab,
-} from './settings';
-import { SourceObserverView, VIEW_TYPE } from './view';
+import { sanitizeSettings, SourceObserverSettings } from './settings';
+import { SourceObserverSettingTab } from './ui/SettingTab';
+import { SourceObserverView, VIEW_TYPE } from './ui/SourceObserverView';
 
-/** Root plugin class — registers the view, ribbon icon, command, and settings tab. */
+/** Root plugin class — registers the view, ribbon icon, commands, and settings tab. */
 export default class SourceObserverPlugin extends Plugin {
 	settings!: SourceObserverSettings;
 	/** Fires 'changed' after settings are persisted so open views can re-render. */
@@ -25,32 +22,31 @@ export default class SourceObserverPlugin extends Plugin {
 			callback: () => { void this.activateView(); },
 		});
 
+		this.addCommand({
+			id: 'open-folder',
+			name: 'Open folder…',
+			callback: () => {
+				void this.activateView().then((view) => view?.promptForFolder());
+			},
+		});
+
 		this.addSettingTab(new SourceObserverSettingTab(this.app, this));
 	}
 
-	onunload() {}
-
 	/** Opens the Source Observer tab, reusing an existing leaf if one is already open. */
-	async activateView() {
+	async activateView(): Promise<SourceObserverView | null> {
 		const { workspace } = this.app;
-		const leaves = workspace.getLeavesOfType(VIEW_TYPE);
-
-		if (leaves.length > 0) {
-			void workspace.revealLeaf(leaves[0] as WorkspaceLeaf);
-			return;
+		let leaf: WorkspaceLeaf | undefined = workspace.getLeavesOfType(VIEW_TYPE)[0];
+		if (!leaf) {
+			leaf = workspace.getLeaf('tab');
+			await leaf.setViewState({ type: VIEW_TYPE, active: true });
 		}
-
-		const leaf = workspace.getLeaf('tab');
-		await leaf.setViewState({ type: VIEW_TYPE, active: true });
-		void workspace.revealLeaf(leaf);
+		await workspace.revealLeaf(leaf);
+		return leaf.view instanceof SourceObserverView ? leaf.view : null;
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign(
-			{},
-			DEFAULT_SETTINGS,
-			(await this.loadData()) as Partial<SourceObserverSettings>,
-		);
+		this.settings = sanitizeSettings(await this.loadData());
 	}
 
 	async saveSettings() {
