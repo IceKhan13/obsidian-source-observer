@@ -17,6 +17,8 @@ export const SEARCH_RESULTS_CAP = 200;
 export interface FilesSectionOptions {
 	showHidden: boolean;
 	onOpenFile: (absPath: string, label: string) => void;
+	/** Right-click on a file or folder; `relPath` is relative to the opened folder. */
+	onContextMenu?: (evt: MouseEvent, absPath: string, relPath: string, isDir: boolean) => void;
 }
 
 /** The "Files" sidebar section: a directory tree plus file-name search. */
@@ -39,7 +41,9 @@ export class FilesSection extends Component {
 		this.treeEl = body.createDiv({ cls: 'so-tree so-scroll' });
 		this.resultsEl = body.createDiv({ cls: 'so-tree so-scroll so-hidden' });
 
-		this.tree = new FileTree(this, this.treeEl, this.showHidden, (abs) => this.open(abs));
+		this.tree = new FileTree(this, this.treeEl, this.showHidden, (abs) => this.open(abs), (evt, abs, isDir) => {
+			opts.onContextMenu?.(evt, abs, this.relative(abs), isDir);
+		});
 
 		attachListNav(this, this.resultsEl, {
 			rows: () => Array.from(this.resultsEl.querySelectorAll<HTMLElement>('[data-so-row]')),
@@ -105,6 +109,11 @@ export class FilesSection extends Component {
 		return this.searchInput.value.trim();
 	}
 
+	/** Path relative to the opened folder, '/'-separated on every platform. */
+	private relative(absPath: string): string {
+		return path.relative(this.folder, absPath).split(path.sep).join('/');
+	}
+
 	private open(absPath: string) {
 		this.tree.select(absPath);
 		this.opts.onOpenFile(absPath, path.relative(this.folder, absPath) || path.basename(absPath));
@@ -160,5 +169,6 @@ export class FilesSection extends Component {
 			row.addClass('is-active');
 			this.open(absPath);
 		});
+		row.addEventListener('contextmenu', (evt) => this.opts.onContextMenu?.(evt, absPath, rel, false));
 	}
 }

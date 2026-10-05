@@ -3,8 +3,12 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
 	resolve: {
-		// The `obsidian` package ships types only; UI tests run against a small shim.
-		alias: { obsidian: fileURLToPath(new URL('./tests/obsidian-shim.ts', import.meta.url)) },
+		// `obsidian` ships types only and `electron` is provided by the app;
+		// tests run against small shims.
+		alias: {
+			obsidian: fileURLToPath(new URL('./tests/obsidian-shim.ts', import.meta.url)),
+			electron: fileURLToPath(new URL('./tests/electron-shim.ts', import.meta.url)),
+		},
 	},
 	test: {
 		include: ['tests/**/*.test.ts'],

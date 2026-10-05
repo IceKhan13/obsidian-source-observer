@@ -397,3 +397,11 @@
 
 /* ── Folder path modal ───────────────────────────────────────── */
 .so-path-input { width: 100%; min-width: 260px; font-family: var(--font-monospace); }
+
+/* Side-by-side diff: the merge view scrolls as a whole, with old and new aligned. */
+.so-diff-split .cm-mergeView { height: 100%; }
+/* `clip` rather than the library's `hidden`, so the find panel can stay sticky. */
+.so-diff-split .cm-mergeViewEditor { overflow: clip; }
+.so-diff-split .cm-mergeViewEditor + .cm-mergeViewEditor {
+	border-left: 1px solid var(--background-modifier-border);
+}

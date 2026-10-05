@@ -46,6 +46,7 @@ export const obsidianTheme = EditorView.theme({
 		fontFamily: 'var(--font-monospace)',
 		lineHeight: '1.6',
 	},
+	'&.cm-focused': { outline: 'none' },
 	'.cm-content': { caretColor: 'var(--text-normal)' },
 	'.cm-cursor': { borderLeftColor: 'var(--text-normal)' },
 	'.cm-activeLine': { background: 'var(--background-modifier-hover)' },
@@ -59,11 +60,48 @@ export const obsidianTheme = EditorView.theme({
 	'.cm-lineNumbers .cm-gutterElement': { padding: '0 10px 0 6px', minWidth: '2ch' },
 	'.cm-selectionBackground, ::selection': { background: 'var(--text-selection)' },
 	'&.cm-focused .cm-selectionBackground': { background: 'var(--text-selection)' },
+	'.cm-searchMatch': { background: 'rgba(var(--color-yellow-rgb), 0.3)' },
+	'.cm-searchMatch.cm-searchMatch-selected': { background: 'rgba(var(--color-orange-rgb), 0.5)' },
+	'.cm-selectionMatch': { background: 'var(--text-highlight-bg)' },
+	// Find and go-to-line panels, styled like Obsidian's own inputs.
+	'.cm-panels': {
+		background: 'var(--background-secondary)',
+		color: 'var(--text-normal)',
+		fontFamily: 'var(--font-interface)',
+		fontSize: 'var(--font-ui-small)',
+	},
+	'.cm-panels.cm-panels-top': { borderBottom: '1px solid var(--background-modifier-border)' },
+	// `.cm-gotoLine` in older @codemirror/search versions, `.cm-dialog` in newer ones.
+	'.cm-panel.cm-search, .cm-panel.cm-gotoLine, .cm-panel.cm-dialog': {
+		display: 'flex',
+		flexWrap: 'wrap',
+		alignItems: 'center',
+		gap: '4px 8px',
+		padding: '6px 28px 6px 8px',
+	},
+	'.cm-panel.cm-search br': { display: 'none' },
+	'.cm-panel .cm-textfield': { fontSize: 'var(--font-ui-small)', padding: '2px 6px', margin: '0' },
+	'.cm-panel .cm-button': {
+		backgroundImage: 'none',
+		background: 'var(--interactive-normal)',
+		color: 'var(--text-normal)',
+		border: 'none',
+		borderRadius: 'var(--button-radius)',
+		boxShadow: 'var(--input-shadow)',
+		fontSize: 'var(--font-ui-smaller)',
+		padding: '2px 8px',
+		margin: '0',
+	},
+	'.cm-panel .cm-button:hover': { background: 'var(--interactive-hover)' },
+	'.cm-panel label': { display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: 'var(--font-ui-smaller)' },
+	'.cm-panel [name=close], .cm-panel .cm-dialog-close': { color: 'var(--text-muted)', top: '6px', right: '6px' },
+	'.cm-panel.cm-dialog form': { display: 'flex', alignItems: 'center', gap: '8px' },
 });
 
 /**
- * Diff colours for `@codemirror/merge`'s unified view. Selectors repeat the
- * `.cm-merge-b` class so they out-rank the library's base theme.
+ * Diff colours for `@codemirror/merge`. The unified view and the new side of
+ * the split view are `.cm-merge-b`; the old side is `.cm-merge-a`. Selectors
+ * repeat those classes so they out-rank the library's base theme.
  */
 export const diffTheme = EditorView.theme({
 	'&.cm-merge-b .cm-changedLine': { background: 'rgba(var(--color-green-rgb), 0.12)' },
@@ -76,7 +114,10 @@ export const diffTheme = EditorView.theme({
 	'&.cm-merge-b .cm-deletedText': { background: 'rgba(var(--color-red-rgb), 0.3)' },
 	'&.cm-merge-b .cm-changedLineGutter': { background: 'var(--color-green)' },
 	'&.cm-merge-b .cm-deletedLineGutter': { background: 'var(--color-red)' },
-	'&.cm-merge-b .cm-collapsedLines': {
+	'&.cm-merge-a .cm-changedLine': { background: 'rgba(var(--color-red-rgb), 0.12)' },
+	'&.cm-merge-a .cm-changedText': { background: 'rgba(var(--color-red-rgb), 0.3)' },
+	'&.cm-merge-a .cm-changedLineGutter': { background: 'var(--color-red)' },
+	'&.cm-merge-a .cm-collapsedLines, &.cm-merge-b .cm-collapsedLines': {
 		color: 'var(--text-muted)',
 		background: 'var(--background-secondary)',
 		fontFamily: 'var(--font-interface)',

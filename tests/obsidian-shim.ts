@@ -166,3 +166,34 @@ export class Component {
 
 	registerEvent() { /* not needed in tests */ }
 }
+
+export const Platform = { isMacOS: false, isDesktopApp: true, isMobile: false };
+
+export class Notice {
+	static messages: string[] = [];
+	constructor(message: string) { Notice.messages.push(message); }
+}
+
+export class MenuItem {
+	title = '';
+	icon = '';
+	callback: () => unknown = () => undefined;
+	setTitle(title: string) { this.title = title; return this; }
+	setIcon(icon: string) { this.icon = icon; return this; }
+	onClick(cb: () => unknown) { this.callback = cb; return this; }
+}
+
+/** Records items instead of rendering; `Menu.last` is the most recently shown menu. */
+export class Menu {
+	static last: Menu | null = null;
+	/** Items in order, with `null` for separators. */
+	items: (MenuItem | null)[] = [];
+	addItem(cb: (item: MenuItem) => unknown) {
+		const item = new MenuItem();
+		cb(item);
+		this.items.push(item);
+		return this;
+	}
+	addSeparator() { this.items.push(null); return this; }
+	showAtMouseEvent() { Menu.last = this; return this; }
+}

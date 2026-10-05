@@ -5,11 +5,14 @@ import type { ChangeEntry, ChangeGroup } from '../../git/status';
 import { loadDiffSides } from '../../git/diffSources';
 import { formatBytes, LoadedContent, readViewableFile } from '../../utils/content';
 import { LatestRequest } from '../../utils/latest';
+import type { DiffLayout } from '../../settings';
 import { CodeRenderer, DiffRenderer, MessageRenderer, PaneRenderer } from './renderers';
 
 export type PaneTarget =
 	| { type: 'file'; absPath: string; label: string }
 	| { type: 'diff'; repo: GitRepo; entry: ChangeEntry; label: string };
+
+interface PaneAction { icon: string; label: string; run: () => void }
 
 const GROUP_LABEL: Record<ChangeGroup, string> = {
 	staged: 'staged',
@@ -55,11 +58,19 @@ export class ContentPane extends Component {
 	private bodyEl: HTMLElement;
 	private current: PaneRenderer | null = null;
 	private target: PaneTarget | null = null;
+	/** Loaded data for `target`, kept so a layout change can re-render without reloading. */
+	private plan: Plan | null = null;
 	private latest = new LatestRequest();
 	/** Identity of what is currently rendered, used to skip no-op reloads. */
 	private signature = '';
 
-	constructor(parent: HTMLElement, private fontSize: number) {
+	constructor(
+		parent: HTMLElement,
+		private fontSize: number,
+		private diffLayout: DiffLayout = 'unified',
+		/** Called when the user switches the diff layout from the header. */
+		private onDiffLayoutChange?: (layout: DiffLayout) => void,
+	) {
 		super();
 		this.headerEl = parent.createDiv({ cls: 'so-pane-header' });
 		this.labelEl = this.headerEl.createDiv({ cls: 'so-path-label' });
@@ -76,6 +87,7 @@ export class ContentPane extends Component {
 	showPlaceholder(text = 'Select a file or change to view it') {
 		this.latest.cancel();
 		this.target = null;
+		this.plan = null;
 		this.signature = '';
 		this.headerEl.removeClass('so-pane-loading');
 		this.setHeader('', null, []);
@@ -98,6 +110,31 @@ export class ContentPane extends Component {
 	setFontSize(fontSize: number) {
 		this.fontSize = fontSize;
 		this.current?.setFontSize(fontSize);
+	}
+
+	/** Switches between unified and side-by-side diffs, re-rendering an open diff. */
+	setDiffLayout(layout: DiffLayout) {
+		if (this.diffLayout === layout) return;
+		this.diffLayout = layout;
+		if (this.target && this.plan?.kind === 'diff') {
+			this.signature = '';
+			this.render(this.target, this.plan, false);
+		}
+	}
+
+	/** True when a file or diff is shown, so find and go-to-line apply. */
+	hasEditor(): boolean {
+		return !!this.current?.editor();
+	}
+
+	/** Opens the find panel in the shown file or diff. */
+	openSearch(): boolean {
+		return this.current?.openSearch() ?? false;
+	}
+
+	/** Opens the go-to-line prompt in the shown file or diff. */
+	goToLine(): boolean {
+		return this.current?.goToLine() ?? false;
 	}
 
 	private async show(target: PaneTarget, keepScroll = false) {
@@ -145,9 +182,12 @@ export class ContentPane extends Component {
 		const signature = [label, ...Object.values(plan).map(String)].join('\0');
 		if (keepScroll && signature === this.signature) return;
 		this.signature = signature;
+		this.plan = plan;
+
+		const find: PaneAction = { icon: 'search', label: 'Find in file', run: () => { this.openSearch(); } };
 
 		if (plan.kind === 'code') {
-			this.setHeader(label, null, []);
+			this.setHeader(label, null, [find]);
 			// Reuse the editor between files instead of rebuilding it.
 			if (this.current instanceof CodeRenderer) {
 				this.current.setDocument(plan.text, plan.fileName, keepScroll);
@@ -160,9 +200,21 @@ export class ContentPane extends Component {
 		}
 
 		if (plan.kind === 'diff') {
-			const diff = new DiffRenderer(this.bodyEl, this.fontSize, plan.original, plan.modified, plan.fileName);
+			const layout = this.diffLayout;
+			const diff = new DiffRenderer(this.bodyEl, this.fontSize, plan.original, plan.modified, plan.fileName, layout);
 			this.mount(diff);
-			const actions: { icon: string; label: string; run: () => void }[] = [];
+			const next: DiffLayout = layout === 'split' ? 'unified' : 'split';
+			const actions: PaneAction[] = [
+				{
+					icon: next === 'split' ? 'columns-2' : 'rows-2',
+					label: next === 'split' ? 'Show side by side' : 'Show unified',
+					run: () => {
+						this.setDiffLayout(next);
+						this.onDiffLayoutChange?.(next);
+					},
+				},
+				find,
+			];
 			const worktreePath = plan.worktreePath;
 			if (worktreePath && target.type === 'diff') {
 				actions.push({
@@ -191,7 +243,7 @@ export class ContentPane extends Component {
 	private setHeader(
 		label: string,
 		stats: { added: number; removed: number } | null,
-		actions: { icon: string; label: string; run: () => void }[],
+		actions: PaneAction[],
 	) {
 		this.labelEl.setText(label);
 		this.labelEl.title = label;

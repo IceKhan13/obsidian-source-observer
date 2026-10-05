@@ -43,6 +43,7 @@ export class FileTree {
 		private container: HTMLElement,
 		private showHidden: boolean,
 		private onSelect: (absPath: string) => void,
+		private onContextMenu?: (evt: MouseEvent, absPath: string, isDir: boolean) => void,
 	) {
 		attachListNav(owner, container, {
 			rows: () => this.visibleRows(),
@@ -212,6 +213,7 @@ export class FileTree {
 		}
 
 		row.addEventListener('click', () => this.activate(row));
+		row.addEventListener('contextmenu', (evt) => this.onContextMenu?.(evt, node.fullPath, node.isDir));
 		this.decorate(node);
 	}
 
