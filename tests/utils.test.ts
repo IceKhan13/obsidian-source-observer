@@ -51,6 +51,12 @@ describe('sanitizeSettings', () => {
 		expect(sanitizeSettings({ lastOpenedPath: '/repo' }).recentFolders).toEqual(['/repo']);
 	});
 
+	it('accepts only known diff layouts', () => {
+		expect(sanitizeSettings({ diffLayout: 'split' }).diffLayout).toBe('split');
+		expect(sanitizeSettings({ diffLayout: 'sideways' }).diffLayout).toBe('unified');
+		expect(sanitizeSettings({}).diffLayout).toBe('unified');
+	});
+
 	it('survives missing or corrupt data', () => {
 		expect(sanitizeSettings(null).fontSize).toBe(13);
 		expect(sanitizeSettings('junk').recentFolders).toEqual([]);

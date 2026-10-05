@@ -30,6 +30,18 @@ export default class SourceObserverPlugin extends Plugin {
 			},
 		});
 
+		this.addCommand({
+			id: 'find-in-file',
+			name: 'Find in file',
+			checkCallback: (checking) => this.withEditor(checking, (view) => view.findInFile()),
+		});
+
+		this.addCommand({
+			id: 'go-to-line',
+			name: 'Go to line',
+			checkCallback: (checking) => this.withEditor(checking, (view) => view.goToLine()),
+		});
+
 		this.addSettingTab(new SourceObserverSettingTab(this.app, this));
 	}
 
@@ -43,6 +55,14 @@ export default class SourceObserverPlugin extends Plugin {
 		}
 		await workspace.revealLeaf(leaf);
 		return leaf.view instanceof SourceObserverView ? leaf.view : null;
+	}
+
+	/** Runs `action` on the active view when it shows a file or diff; for `checkCallback`. */
+	private withEditor(checking: boolean, action: (view: SourceObserverView) => void): boolean {
+		const view = this.app.workspace.getActiveViewOfType(SourceObserverView);
+		if (!view?.hasEditor()) return false;
+		if (!checking) action(view);
+		return true;
 	}
 
 	async loadSettings() {

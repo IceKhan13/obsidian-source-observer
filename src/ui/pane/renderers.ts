@@ -1,8 +1,10 @@
 import { Component, setIcon } from 'obsidian';
 import { Compartment, EditorState, Extension } from '@codemirror/state';
-import { EditorView, highlightActiveLine, lineNumbers } from '@codemirror/view';
+import { EditorView, highlightActiveLine, keymap, lineNumbers } from '@codemirror/view';
 import { syntaxHighlighting } from '@codemirror/language';
-import { unifiedMergeView } from '@codemirror/merge';
+import { MergeView, unifiedMergeView } from '@codemirror/merge';
+import { gotoLine, highlightSelectionMatches, openSearchPanel, search, searchKeymap } from '@codemirror/search';
+import type { DiffLayout } from '../../settings';
 import { diffStats, DiffStats } from '../editor/diffStats';
 import { languageFor } from '../editor/languages';
 import { diffTheme, fontTheme, obsidianHighlight, obsidianTheme } from '../editor/theme';
@@ -25,12 +27,37 @@ export abstract class PaneRenderer extends Component {
 	}
 
 	setFontSize(_fontSize: number) { /* optional */ }
+
+	/** The editor that find and go-to-line act on, if this renderer has one. */
+	editor(): EditorView | null { return null; }
+
+	/** Opens the find panel; returns false when there is nothing to search. */
+	openSearch(): boolean {
+		const view = this.editor();
+		if (!view) return false;
+		openSearchPanel(view);
+		return true;
+	}
+
+	/** Opens the go-to-line prompt; returns false when there is no editor. */
+	goToLine(): boolean {
+		const view = this.editor();
+		if (!view) return false;
+		gotoLine(view);
+		return true;
+	}
 }
 
 function baseEditorExtensions(): Extension[] {
 	return [
 		EditorState.readOnly.of(true),
 		EditorView.editable.of(false),
+		// Read-only content is not focusable by default; without focus the
+		// find and go-to-line keys would never reach the editor.
+		EditorView.contentAttributes.of({ tabindex: '0' }),
+		search({ top: true }),
+		highlightSelectionMatches(),
+		keymap.of(searchKeymap),
 		lineNumbers(),
 		highlightActiveLine(),
 		syntaxHighlighting(obsidianHighlight),
@@ -70,6 +97,8 @@ export class CodeRenderer extends PaneRenderer {
 		super.onunload();
 	}
 
+	editor() { return this.view; }
+
 	/** Replaces the document in place; scrolls back to the top unless `keepScroll`. */
 	setDocument(text: string, fileName: string, keepScroll: boolean) {
 		const view = this.view;
@@ -92,11 +121,15 @@ export class CodeRenderer extends PaneRenderer {
 }
 
 /**
- * Unified, syntax-highlighted diff of two documents using
- * `@codemirror/merge`. Unchanged stretches are collapsed.
+ * Syntax-highlighted diff of two documents using `@codemirror/merge`,
+ * either unified (one editor) or split (old and new side by side).
+ * Unchanged stretches are collapsed in both layouts.
  */
 export class DiffRenderer extends PaneRenderer {
-	private view: EditorView | null = null;
+	private unified: EditorView | null = null;
+	private split: MergeView | null = null;
+	/** Side of the split layout that last had focus. */
+	private focusedSide: 'a' | 'b' = 'b';
 	private font = new Compartment();
 
 	constructor(
@@ -105,36 +138,64 @@ export class DiffRenderer extends PaneRenderer {
 		private original: string,
 		private modified: string,
 		private fileName: string,
+		readonly layout: DiffLayout,
 	) {
-		super(parent, 'so-diff-view');
+		super(parent, `so-diff-view so-diff-${layout}`);
 	}
 
 	onload() {
-		this.view = new EditorView({
+		const extensions = [
+			...baseEditorExtensions(),
+			languageFor(this.fileName),
+			this.font.of(fontTheme(this.fontSize)),
+			diffTheme,
+		];
+		const collapseUnchanged = { margin: 3, minSize: 6 };
+
+		if (this.layout === 'split') {
+			this.split = new MergeView({
+				parent: this.el,
+				a: { doc: this.original, extensions },
+				b: { doc: this.modified, extensions },
+				highlightChanges: true,
+				gutter: true,
+				collapseUnchanged,
+			});
+			this.registerDomEvent(this.split.a.dom, 'focusin', () => { this.focusedSide = 'a'; });
+			this.registerDomEvent(this.split.b.dom, 'focusin', () => { this.focusedSide = 'b'; });
+			return;
+		}
+
+		this.unified = new EditorView({
 			parent: this.el,
 			state: EditorState.create({
 				doc: this.modified,
 				extensions: [
-					...baseEditorExtensions(),
-					languageFor(this.fileName),
-					this.font.of(fontTheme(this.fontSize)),
+					...extensions,
 					unifiedMergeView({
 						original: this.original,
 						mergeControls: false,
 						highlightChanges: true,
 						gutter: true,
-						collapseUnchanged: { margin: 3, minSize: 6 },
+						collapseUnchanged,
 					}),
-					diffTheme,
 				],
 			}),
 		});
 	}
 
 	onunload() {
-		this.view?.destroy();
-		this.view = null;
+		this.unified?.destroy();
+		this.split?.destroy();
+		this.unified = null;
+		this.split = null;
 		super.onunload();
+	}
+
+	/** In the split layout, the side that last had focus, defaulting to the new version. */
+	editor() {
+		if (this.split) return this.split[this.focusedSide];
+		return this.unified;
 	}
 
 	/** Number of added and removed lines across all changed chunks. */
@@ -145,7 +206,13 @@ export class DiffRenderer extends PaneRenderer {
 	setFontSize(fontSize: number) {
 		if (this.fontSize === fontSize) return;
 		this.fontSize = fontSize;
-		this.view?.dispatch({ effects: this.font.reconfigure(fontTheme(fontSize)) });
+		const effects = this.font.reconfigure(fontTheme(fontSize));
+		for (const view of this.views()) view.dispatch({ effects });
+	}
+
+	private views(): EditorView[] {
+		if (this.split) return [this.split.a, this.split.b];
+		return this.unified ? [this.unified] : [];
 	}
 }
 

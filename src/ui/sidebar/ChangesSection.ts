@@ -14,6 +14,7 @@ import { createSection } from './section';
 export interface ChangesSectionOptions {
 	onOpenDiff: (entry: ChangeEntry) => void;
 	onRefresh: () => void;
+	onContextMenu?: (evt: MouseEvent, entry: ChangeEntry) => void;
 }
 
 const GROUPS: { group: ChangeGroup; title: string }[] = [
@@ -148,6 +149,7 @@ export class ChangesSection extends Component {
 			row.addClass('is-active');
 			this.opts.onOpenDiff(entry);
 		});
+		row.addEventListener('contextmenu', (evt) => this.opts.onContextMenu?.(evt, entry));
 	}
 
 	private renderBranch(branch: BranchInfo | null) {

@@ -1,6 +1,6 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
 import type SourceObserverPlugin from '../main';
-import { FONT_SIZE_RANGE } from '../settings';
+import { DiffLayout, FONT_SIZE_RANGE } from '../settings';
 
 /** Obsidian settings tab for Source Observer. */
 export class SourceObserverSettingTab extends PluginSettingTab {
@@ -23,6 +23,20 @@ export class SourceObserverSettingTab extends PluginSettingTab {
 					.setDynamicTooltip()
 					.onChange(async (value) => {
 						settings.fontSize = value;
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(containerEl)
+			.setName('Diff layout')
+			.setDesc('Show changes in one column, or the old and new versions side by side.')
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption('unified', 'Unified')
+					.addOption('split', 'Side by side')
+					.setValue(settings.diffLayout)
+					.onChange(async (value) => {
+						settings.diffLayout = value as DiffLayout;
 						await this.plugin.saveSettings();
 					}),
 			);

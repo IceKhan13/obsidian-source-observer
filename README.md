@@ -9,11 +9,13 @@ A lightweight codebase viewer for [Obsidian](https://obsidian.md). Browse any fo
 - **File tree** — navigate any folder with file-type icons; files and folders are coloured by git status, and folders containing changes are marked with a dot. The tree updates itself when files are created or deleted.
 - **Syntax highlighting** — follows your Obsidian theme. Supports JS/TS, Python, Rust, Go, Ruby, Java, Kotlin, Scala, C/C++, C#, Swift, PHP, Lua, SQL, shell, CSS, HTML, Vue/Svelte, JSON, YAML, TOML, Markdown, Dockerfiles and more.
 - **Git changes** — changed files grouped into **Merge conflicts**, **Staged** and **Changes**, with the current branch and ahead/behind counts.
-- **Inline diffs** — a syntax-highlighted unified diff with unchanged regions collapsed and `+added −removed` line counts. Staged diffs compare HEAD to the index; unstaged diffs compare the index to the working tree.
+- **Diffs** — syntax-highlighted, unified or side by side, with unchanged regions collapsed and `+added −removed` line counts. Staged diffs compare HEAD to the index; unstaged diffs compare the index to the working tree.
+- **Find in file and go to line** — <kbd>Mod</kbd>+<kbd>F</kbd> opens a find bar with case, regexp and whole-word options; **Go to line** accepts `42`, `42:7`, `+10` or `50%`.
 - **Live updates** — the change list, tree and open file refresh automatically when files or git state change.
 - **Subfolders of a repository** — open any folder inside a repo; only changes within that folder are shown.
 - **Search** — file-name search with exact and prefix matches ranked first (respects `.gitignore` in repositories; type a `/` to match paths) and a filter for changed files.
 - **Keyboard navigation** — arrow keys, Home/End, Enter, and Left/Right to collapse and expand folders.
+- **Context menu** — right-click a file, folder or change to copy its path or relative path, reveal it in Finder or the system file manager, or open it in its default app.
 - **Recent folders** and a resizable sidebar.
 - **Safe with large and binary files** — files over 2 MB and binary files show a message instead of being loaded.
 
@@ -21,13 +23,14 @@ A lightweight codebase viewer for [Obsidian](https://obsidian.md). Browse any fo
 
 1. Select the `</>` icon in the ribbon or run **Source Observer: Open** from the command palette.
 2. Select the folder button at the top of the sidebar, then **Browse…**, **Enter path…**, or a recent folder. You can also run **Source Observer: Open folder…**.
-3. Select a file in **Files** to view it, or a file in **Changes** to view its diff. In a diff, use the file icon in the header to open the full file.
-4. Use the search icon in each section header to filter; press <kbd>Esc</kbd> to close the search.
-5. Drag the border between the sidebar and the viewer to resize it; double-click to reset.
+3. Select a file in **Files** to view it, or a file in **Changes** to view its diff. In a diff, use the icons in the header to switch between unified and side-by-side layout, or to open the full file. The default layout is in **Settings → Source Observer → Diff layout**.
+4. Press <kbd>Mod</kbd>+<kbd>F</kbd>, or select the search icon in the header, to find text in the open file or diff. Run **Source Observer: Go to line** to jump to a line; both commands can be given hotkeys in **Settings → Hotkeys**.
+5. Use the search icon in each section header to filter; press <kbd>Esc</kbd> to close the search.
+6. Drag the border between the sidebar and the viewer to resize it; double-click to reset.
 
 ## Privacy
 
-Source Observer works entirely offline. It reads files from the folder you open and runs your local `git` executable (read-only commands such as `status`, `ls-files` and `cat-file`, with `--no-optional-locks` so it never writes to your repository). It makes no network requests and collects no data.
+Source Observer works entirely offline. It reads files from the folder you open and runs your local `git` executable (read-only commands such as `status`, `ls-files` and `cat-file`, with `--no-optional-locks` so it never writes to your repository). It makes no network requests and collects no data. **Reveal in Finder** and **Open in default app** hand the selected path to your operating system.
 
 ## Installation
 
@@ -65,7 +68,8 @@ src/
     sidebar/                  Files and Changes sections, tree, keyboard navigation
     pane/                     content pane and its renderers (code, diff, message)
     editor/                   CodeMirror theme, languages, diff stats
-  utils/                      file reading, icons, paths, request tokens
+    fileMenu.ts               right-click menu for files, folders and changes
+  utils/                      file reading, icons, paths, request tokens, OS integration
 ```
 
 Each renderer in the content pane is an Obsidian `Component`, so swapping what is shown always tears down the previous editor, DOM and listeners. All loads into the pane go through one "latest request wins" token, so a slow load can never replace a newer selection.

@@ -6,9 +6,12 @@ import { GitRepo } from '../src/git/GitRepo';
 import { ChangeEntry, groupChanges } from '../src/git/status';
 import type { RepoSnapshot } from '../src/services/RepoState';
 import { ContentPane } from '../src/ui/pane/ContentPane';
+import { fileMenuGroups, showFileMenu } from '../src/ui/fileMenu';
 import { ChangesSection } from '../src/ui/sidebar/ChangesSection';
 import { FileTree } from '../src/ui/sidebar/FileTree';
 import { makeRepo, remove, tempDir, write } from './helpers';
+// Same module instance as `obsidian` under vitest's alias, with the recording API typed.
+import { Menu } from './obsidian-shim';
 
 const cleanup: string[] = [];
 const roots: Component[] = [];
@@ -88,6 +91,47 @@ describe('ContentPane', () => {
 		expect(el.querySelectorAll('.cm-editor')).toHaveLength(0);
 	});
 
+	it('renders a side-by-side diff and switches layout without reloading', async () => {
+		const { repo, entry } = await repoWithChange();
+		const { owner, el } = host();
+		const layouts: string[] = [];
+		const pane = owner.addChild(new ContentPane(el, 13, 'split', (l) => layouts.push(l)));
+
+		await pane.showDiff(repo, entry, 'big.ts');
+		expect(el.querySelectorAll('.so-diff-split .cm-mergeView .cm-editor')).toHaveLength(2);
+		expect(el.querySelector('.cm-merge-a')?.textContent).toContain('line 100');
+		expect(el.querySelector('.cm-merge-b')?.textContent).toContain('line one hundred');
+		expect(el.querySelector('.so-pane-stats')?.textContent).toBe('+1−1');
+
+		const toggle = el.querySelector<HTMLElement>('.so-pane-action[aria-label="Show unified"]');
+		toggle?.click();
+		expect(layouts).toEqual(['unified']);
+		expect(el.querySelectorAll('.so-diff-view')).toHaveLength(1);
+		expect(el.querySelectorAll('.so-diff-unified .cm-editor')).toHaveLength(1);
+		expect(el.querySelector('.so-pane-action[aria-label="Show side by side"]')).not.toBeNull();
+
+		owner.removeChild(pane);
+		expect(el.querySelectorAll('.cm-editor')).toHaveLength(0);
+	});
+
+	it('opens find and go-to-line only when a file or diff is shown', async () => {
+		const dir = tempDir();
+		cleanup.push(dir);
+		write(dir, 'a.ts', 'const needle = 1;\n');
+		const { owner, el } = host();
+		const pane = owner.addChild(new ContentPane(el, 13));
+
+		expect(pane.hasEditor()).toBe(false);
+		expect(pane.openSearch()).toBe(false);
+
+		await pane.showFile(path.join(dir, 'a.ts'), 'a.ts');
+		expect(pane.hasEditor()).toBe(true);
+		el.querySelector<HTMLElement>('.so-pane-action[aria-label="Find in file"]')?.click();
+		expect(el.querySelector('.cm-panel.cm-search')).not.toBeNull();
+		expect(pane.goToLine()).toBe(true);
+		expect(el.querySelector('.cm-goto-line, .cm-gotoLine')).not.toBeNull();
+	});
+
 	it('shows a message instead of loading binary files', async () => {
 		const dir = tempDir();
 		cleanup.push(dir);
@@ -130,7 +174,46 @@ describe('ChangesSection', () => {
 	});
 });
 
+describe('file menu', () => {
+	const file = { absPath: '/repo/src/a.ts', relPath: 'src/a.ts', isDir: false, exists: true };
+	const titles = (groups: ReturnType<typeof fileMenuGroups>) => groups.map((g) => g.map((i) => i.title));
+
+	it('offers copy, reveal and open for existing files', () => {
+		expect(titles(fileMenuGroups(file))).toEqual([
+			['Copy path', 'Copy relative path'],
+			['Show in system explorer', 'Open in default app'],
+		]);
+	});
+
+	it('cannot open folders in an app, or deleted files at all', () => {
+		expect(titles(fileMenuGroups({ ...file, isDir: true }))[1]).toEqual(['Show in system explorer']);
+		expect(titles(fileMenuGroups({ ...file, exists: false }))).toEqual([['Copy path', 'Copy relative path']]);
+	});
+
+	it('puts extra items first and separates groups', () => {
+		const evt = new MouseEvent('contextmenu', { cancelable: true });
+		showFileMenu(evt, file, [{ title: 'Open file', icon: 'file-text', run: () => {} }]);
+		expect(evt.defaultPrevented).toBe(true);
+		expect(Menu.last?.items.map((i) => i?.title ?? '---')).toEqual([
+			'Open file', '---', 'Copy path', 'Copy relative path', '---', 'Show in system explorer', 'Open in default app',
+		]);
+	});
+});
+
 describe('FileTree', () => {
+	it('reports right-clicks on files and folders', async () => {
+		const dir = tempDir();
+		cleanup.push(dir);
+		write(dir, 'src/a.ts', '');
+		const { owner, el } = host();
+		const clicked: [string, boolean][] = [];
+		const tree = new FileTree(owner, el, true, () => {}, (_evt, p, isDir) => clicked.push([p, isDir]));
+		await tree.load(dir);
+		const srcRow = [...el.querySelectorAll<HTMLElement>('.so-tree-dir')].find((r) => r.textContent === 'src');
+		srcRow?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+		expect(clicked).toEqual([[path.join(dir, 'src'), true]]);
+	});
+
 	it('picks up new files on refresh and keeps folders expanded', async () => {
 		const dir = tempDir();
 		cleanup.push(dir);

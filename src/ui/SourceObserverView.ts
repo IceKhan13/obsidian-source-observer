@@ -1,11 +1,12 @@
-import { debounce, ItemView, Notice, setIcon, WorkspaceLeaf } from 'obsidian';
+import { debounce, ItemView, Notice, Scope, setIcon, WorkspaceLeaf } from 'obsidian';
 import * as path from 'path';
 import type SourceObserverPlugin from '../main';
 import { addRecentFolder, clamp, DEFAULT_SETTINGS, SIDEBAR_WIDTH_RANGE } from '../settings';
-import { ChangeKind, primaryKind } from '../git/status';
+import { ChangeEntry, ChangeKind, primaryKind } from '../git/status';
 import { RepoSnapshot, RepoState } from '../services/RepoState';
 import { RepoWatcher } from '../services/RepoWatcher';
 import { isDirectory, normalizeFolderInput } from '../utils/paths';
+import { showFileMenu } from './fileMenu';
 import { promptForFolder, showFolderMenu } from './folderPicker';
 import { ContentPane } from './pane/ContentPane';
 import { ChangesSection } from './sidebar/ChangesSection';
@@ -36,6 +37,10 @@ export class SourceObserverView extends ItemView {
 
 	constructor(leaf: WorkspaceLeaf, private plugin: SourceObserverPlugin) {
 		super(leaf);
+		// Active while this view is focused, so Mod+F works without first
+		// clicking into the editor.
+		this.scope = new Scope(this.app.scope);
+		this.scope.register(['Mod'], 'F', () => (this.findInFile() ? false : undefined));
 	}
 
 	getViewType() { return VIEW_TYPE; }
@@ -70,6 +75,9 @@ export class SourceObserverView extends ItemView {
 		this.files = this.addChild(new FilesSection(sidebar, {
 			showHidden: settings.showHidden,
 			onOpenFile: (absPath, label) => { void this.pane.showFile(absPath, label); },
+			onContextMenu: (evt, absPath, relPath, isDir) => {
+				showFileMenu(evt, { absPath, relPath, isDir, exists: true });
+			},
 		}));
 		this.changes = this.addChild(new ChangesSection(sidebar, {
 			onOpenDiff: (entry) => {
@@ -78,6 +86,7 @@ export class SourceObserverView extends ItemView {
 				void this.pane.showDiff(repo, entry, repo.toFolderRelative(entry.file.path));
 			},
 			onRefresh: () => this.refreshAll(),
+			onContextMenu: (evt, entry) => this.showChangeMenu(evt, entry),
 		}));
 
 		// ── Resize handle and content pane ───────────────────────────
@@ -86,7 +95,10 @@ export class SourceObserverView extends ItemView {
 			attr: { role: 'separator', 'aria-orientation': 'vertical', 'aria-label': 'Resize sidebar', tabindex: '0' },
 		}), sidebar);
 		const main = root.createDiv({ cls: 'so-main' });
-		this.pane = this.addChild(new ContentPane(main, settings.fontSize));
+		this.pane = this.addChild(new ContentPane(main, settings.fontSize, settings.diffLayout, (layout) => {
+			this.plugin.settings.diffLayout = layout;
+			void this.plugin.saveSettings();
+		}));
 
 		// ── Change detection ─────────────────────────────────────────
 		const reloadPane = debounce(() => this.pane.reload(), PANE_RELOAD_DEBOUNCE_MS, true);
@@ -111,6 +123,7 @@ export class SourceObserverView extends ItemView {
 		const settingsRef = this.plugin.settingsEvents.on('changed', () => {
 			const s = this.plugin.settings;
 			this.pane.setFontSize(s.fontSize);
+			this.pane.setDiffLayout(s.diffLayout);
 			this.files.setShowHidden(s.showHidden);
 		});
 		this.register(() => this.plugin.settingsEvents.offref(settingsRef));
@@ -123,6 +136,21 @@ export class SourceObserverView extends ItemView {
 	/** Asks for a folder path and opens it. */
 	promptForFolder() {
 		promptForFolder(this.app, this.folder, (dir) => { void this.openFolder(dir, true); });
+	}
+
+	/** True when a file or diff is shown, so find and go-to-line apply. */
+	hasEditor(): boolean {
+		return this.pane.hasEditor();
+	}
+
+	/** Opens the find panel in the shown file or diff; false if nothing is shown. */
+	findInFile(): boolean {
+		return this.pane.openSearch();
+	}
+
+	/** Opens the go-to-line prompt in the shown file or diff; false if nothing is shown. */
+	goToLine(): boolean {
+		return this.pane.goToLine();
 	}
 
 	/** Opens `input` as the browsed folder; `remember` stores it as last/recent. */
@@ -146,6 +174,18 @@ export class SourceObserverView extends ItemView {
 		this.pane.showPlaceholder();
 		this.files.setFolder(folder);
 		await this.state.open(folder);
+	}
+
+	private showChangeMenu(evt: MouseEvent, entry: ChangeEntry) {
+		if (this.state.snapshot.kind !== 'repo') return;
+		const repo = this.state.snapshot.repo;
+		const relPath = repo.toFolderRelative(entry.file.path);
+		const absPath = repo.absPath(entry.file.path);
+		const exists = entry.kind !== 'deleted';
+		const extra = exists
+			? [{ title: 'Open file', icon: 'file-text', run: () => { void this.pane.showFile(absPath, relPath); } }]
+			: [];
+		showFileMenu(evt, { absPath, relPath, isDir: false, exists }, extra);
 	}
 
 	private refreshAll() {

@@ -1,3 +1,6 @@
+/** How diffs are laid out: one interleaved column, or old and new side by side. */
+export type DiffLayout = 'unified' | 'split';
+
 /** Persisted plugin settings stored in `data.json`. */
 export interface SourceObserverSettings {
 	lastOpenedPath: string;
@@ -7,6 +10,7 @@ export interface SourceObserverSettings {
 	recentFolders: string[];
 	/** Sidebar width in px. */
 	sidebarWidth: number;
+	diffLayout: DiffLayout;
 }
 
 export const DEFAULT_SETTINGS: SourceObserverSettings = {
@@ -15,6 +19,7 @@ export const DEFAULT_SETTINGS: SourceObserverSettings = {
 	showHidden: true,
 	recentFolders: [],
 	sidebarWidth: 240,
+	diffLayout: 'unified',
 };
 
 export const FONT_SIZE_RANGE = { min: 10, max: 20 } as const;
@@ -46,6 +51,7 @@ export function sanitizeSettings(raw: unknown): SourceObserverSettings {
 		showHidden: typeof data.showHidden === 'boolean' ? data.showHidden : DEFAULT_SETTINGS.showHidden,
 		recentFolders: [...new Set(recentFolders)].slice(0, MAX_RECENT_FOLDERS),
 		sidebarWidth: clamp(num(data.sidebarWidth, DEFAULT_SETTINGS.sidebarWidth), SIDEBAR_WIDTH_RANGE.min, SIDEBAR_WIDTH_RANGE.max),
+		diffLayout: data.diffLayout === 'split' ? 'split' : 'unified',
 	};
 }
 
