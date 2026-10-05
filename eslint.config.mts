@@ -31,6 +31,15 @@ export default tseslint.config(
 	},
 	...obsidianmd.configs.recommended,
 	{
+		// Tests run under Node via vitest, not inside Obsidian.
+		files: ['tests/**/*.ts'],
+		languageOptions: { globals: { ...globals.node } },
+		rules: {
+			'obsidianmd/prefer-window-timers': 'off',
+			'obsidianmd/prefer-active-doc': 'off',
+		},
+	},
+	{
 		// @codemirror/* and @lezer/* are Obsidian-provided externals (not bundled).
 		// They live in devDependencies intentionally — allow importing them from src.
 		rules: {

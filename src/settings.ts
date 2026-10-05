@@ -1,56 +1,55 @@
-import { App, PluginSettingTab, Setting } from 'obsidian';
-import type SourceObserverPlugin from './main';
-
 /** Persisted plugin settings stored in `data.json`. */
 export interface SourceObserverSettings {
 	lastOpenedPath: string;
 	fontSize: number;
 	showHidden: boolean;
+	/** Most recently opened folders, newest first. */
+	recentFolders: string[];
+	/** Sidebar width in px. */
+	sidebarWidth: number;
 }
 
 export const DEFAULT_SETTINGS: SourceObserverSettings = {
 	lastOpenedPath: '',
 	fontSize: 13,
 	showHidden: true,
+	recentFolders: [],
+	sidebarWidth: 240,
 };
 
-/** Obsidian settings tab for configuring font size and hidden-file visibility. */
-export class SourceObserverSettingTab extends PluginSettingTab {
-	plugin: SourceObserverPlugin;
+export const FONT_SIZE_RANGE = { min: 10, max: 20 } as const;
+export const SIDEBAR_WIDTH_RANGE = { min: 160, max: 600 } as const;
+export const MAX_RECENT_FOLDERS = 8;
 
-	constructor(app: App, plugin: SourceObserverPlugin) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
+export function clamp(value: number, min: number, max: number): number {
+	return Math.min(max, Math.max(min, value));
+}
 
-	display(): void {
-		const { containerEl } = this;
-		containerEl.empty();
+/**
+ * Builds valid settings from whatever was stored on disk, falling back to
+ * defaults for missing or malformed values.
+ */
+export function sanitizeSettings(raw: unknown): SourceObserverSettings {
+	const data = (raw && typeof raw === 'object' ? raw : {}) as Partial<Record<keyof SourceObserverSettings, unknown>>;
+	const num = (v: unknown, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
 
-		new Setting(containerEl)
-			.setName('Font size')
-			.setDesc('Code viewer font size in px')
-			.addSlider((slider) =>
-				slider
-					.setLimits(10, 20, 1)
-					.setValue(this.plugin.settings.fontSize)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.fontSize = value;
-						await this.plugin.saveSettings();
-					}),
-			);
+	const lastOpenedPath = typeof data.lastOpenedPath === 'string' ? data.lastOpenedPath : DEFAULT_SETTINGS.lastOpenedPath;
+	let recentFolders = Array.isArray(data.recentFolders)
+		? data.recentFolders.filter((p): p is string => typeof p === 'string' && p.length > 0)
+		: [];
+	// Seed the list for users upgrading from versions without recent folders.
+	if (recentFolders.length === 0 && lastOpenedPath) recentFolders = [lastOpenedPath];
 
-		new Setting(containerEl)
-			.setName('Show hidden files')
-			.setDesc('Show files and folders starting with a dot')
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.showHidden)
-					.onChange(async (value) => {
-						this.plugin.settings.showHidden = value;
-						await this.plugin.saveSettings();
-					}),
-			);
-	}
+	return {
+		lastOpenedPath,
+		fontSize: clamp(Math.round(num(data.fontSize, DEFAULT_SETTINGS.fontSize)), FONT_SIZE_RANGE.min, FONT_SIZE_RANGE.max),
+		showHidden: typeof data.showHidden === 'boolean' ? data.showHidden : DEFAULT_SETTINGS.showHidden,
+		recentFolders: [...new Set(recentFolders)].slice(0, MAX_RECENT_FOLDERS),
+		sidebarWidth: clamp(num(data.sidebarWidth, DEFAULT_SETTINGS.sidebarWidth), SIDEBAR_WIDTH_RANGE.min, SIDEBAR_WIDTH_RANGE.max),
+	};
+}
+
+/** Moves `folder` to the front of the recent list, dropping duplicates and overflow. */
+export function addRecentFolder(recent: string[], folder: string): string[] {
+	return [folder, ...recent.filter((p) => p !== folder)].slice(0, MAX_RECENT_FOLDERS);
 }

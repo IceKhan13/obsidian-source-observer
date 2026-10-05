@@ -1,0 +1,229 @@
+import { debounce, ItemView, Notice, setIcon, WorkspaceLeaf } from 'obsidian';
+import * as path from 'path';
+import type SourceObserverPlugin from '../main';
+import { addRecentFolder, clamp, DEFAULT_SETTINGS, SIDEBAR_WIDTH_RANGE } from '../settings';
+import { ChangeKind, primaryKind } from '../git/status';
+import { RepoSnapshot, RepoState } from '../services/RepoState';
+import { RepoWatcher } from '../services/RepoWatcher';
+import { isDirectory, normalizeFolderInput } from '../utils/paths';
+import { promptForFolder, showFolderMenu } from './folderPicker';
+import { ContentPane } from './pane/ContentPane';
+import { ChangesSection } from './sidebar/ChangesSection';
+import { FilesSection } from './sidebar/FilesSection';
+
+export const VIEW_TYPE = 'source-observer';
+
+/** Delay before reloading the open file or diff after a change, in ms. */
+const PANE_RELOAD_DEBOUNCE_MS = 250;
+/** Sidebar width change per arrow-key press on the resize handle, in px. */
+const RESIZE_KEY_STEP = 16;
+
+/**
+ * Two-column layout: Files and Changes sections on the left, the content
+ * pane on the right. The view only wires components together; git state
+ * lives in `RepoState`, change detection in `RepoWatcher`, and the right
+ * pane in `ContentPane`.
+ */
+export class SourceObserverView extends ItemView {
+	private state = new RepoState();
+	private pane!: ContentPane;
+	private files!: FilesSection;
+	private changes!: ChangesSection;
+	private watcher!: RepoWatcher;
+	private openLabel!: HTMLElement;
+	private folder = '';
+	private watchKey: string | null = null;
+
+	constructor(leaf: WorkspaceLeaf, private plugin: SourceObserverPlugin) {
+		super(leaf);
+	}
+
+	getViewType() { return VIEW_TYPE; }
+	getDisplayText() { return 'Source observer'; }
+	getIcon() { return 'code-2'; }
+
+	onOpen(): Promise<void> {
+		const settings = this.plugin.settings;
+		const root = this.contentEl;
+		root.empty();
+		root.addClass('so-root');
+		this.setSidebarWidth(settings.sidebarWidth);
+
+		// ── Sidebar ───────────────────────────────────────────────────
+		const sidebar = root.createDiv({ cls: 'so-sidebar' });
+		const openBtn = sidebar.createEl('button', { cls: 'so-open-btn', attr: { 'aria-label': 'Open folder' } });
+		setIcon(openBtn.createSpan({ cls: 'so-open-icon' }), 'folder-open');
+		this.openLabel = openBtn.createSpan({ cls: 'so-open-label', text: 'Open folder…' });
+		setIcon(openBtn.createSpan({ cls: 'so-open-chevron' }), 'chevron-down');
+		this.registerDomEvent(openBtn, 'click', (evt) => {
+			showFolderMenu(this.app, evt, {
+				recent: this.plugin.settings.recentFolders,
+				current: this.folder,
+				onChoose: (dir) => { void this.openFolder(dir, true); },
+				onClearRecent: () => {
+					this.plugin.settings.recentFolders = [];
+					void this.plugin.saveSettings();
+				},
+			});
+		});
+
+		this.files = this.addChild(new FilesSection(sidebar, {
+			showHidden: settings.showHidden,
+			onOpenFile: (absPath, label) => { void this.pane.showFile(absPath, label); },
+		}));
+		this.changes = this.addChild(new ChangesSection(sidebar, {
+			onOpenDiff: (entry) => {
+				if (this.state.snapshot.kind !== 'repo') return;
+				const repo = this.state.snapshot.repo;
+				void this.pane.showDiff(repo, entry, repo.toFolderRelative(entry.file.path));
+			},
+			onRefresh: () => this.refreshAll(),
+		}));
+
+		// ── Resize handle and content pane ───────────────────────────
+		this.buildResizer(root.createDiv({
+			cls: 'so-resizer',
+			attr: { role: 'separator', 'aria-orientation': 'vertical', 'aria-label': 'Resize sidebar', tabindex: '0' },
+		}), sidebar);
+		const main = root.createDiv({ cls: 'so-main' });
+		this.pane = this.addChild(new ContentPane(main, settings.fontSize));
+
+		// ── Change detection ─────────────────────────────────────────
+		const reloadPane = debounce(() => this.pane.reload(), PANE_RELOAD_DEBOUNCE_MS, true);
+		this.register(() => reloadPane.cancel());
+		this.watcher = this.addChild(new RepoWatcher({
+			isVisible: () => this.contentEl.isShown(),
+			onGitChange: () => {
+				void this.state.refresh();
+				reloadPane();
+			},
+			onTreeChange: () => {
+				this.files.refresh();
+				reloadPane();
+			},
+		}));
+		this.registerEvent(this.app.workspace.on('active-leaf-change', () => this.watcher.resume()));
+		this.registerEvent(this.app.workspace.on('layout-change', () => this.watcher.resume()));
+
+		this.register(this.state.onChange((snapshot) => this.applySnapshot(snapshot)));
+		this.register(() => this.state.dispose());
+
+		const settingsRef = this.plugin.settingsEvents.on('changed', () => {
+			const s = this.plugin.settings;
+			this.pane.setFontSize(s.fontSize);
+			this.files.setShowHidden(s.showHidden);
+		});
+		this.register(() => this.plugin.settingsEvents.offref(settingsRef));
+
+		// Load the last folder without blocking the workspace.
+		if (settings.lastOpenedPath) void this.openFolder(settings.lastOpenedPath, false);
+		return Promise.resolve();
+	}
+
+	/** Asks for a folder path and opens it. */
+	promptForFolder() {
+		promptForFolder(this.app, this.folder, (dir) => { void this.openFolder(dir, true); });
+	}
+
+	/** Opens `input` as the browsed folder; `remember` stores it as last/recent. */
+	async openFolder(input: string, remember: boolean) {
+		const folder = normalizeFolderInput(input);
+		if (remember) {
+			if (!(await isDirectory(folder))) {
+				new Notice(`Folder not found: ${folder}`);
+				return;
+			}
+			const settings = this.plugin.settings;
+			settings.lastOpenedPath = folder;
+			settings.recentFolders = addRecentFolder(settings.recentFolders, folder);
+			await this.plugin.saveSettings();
+		}
+
+		this.folder = folder;
+		this.watchKey = null;
+		this.openLabel.setText(path.basename(folder) || folder);
+		this.openLabel.parentElement?.setAttr('aria-label', `Open folder (current: ${folder})`);
+		this.pane.showPlaceholder();
+		this.files.setFolder(folder);
+		await this.state.open(folder);
+	}
+
+	private refreshAll() {
+		void this.state.refresh();
+		this.files.refresh();
+		this.pane.reload();
+	}
+
+	private applySnapshot(snapshot: RepoSnapshot) {
+		this.changes.update(snapshot);
+
+		const repo = snapshot.kind === 'repo' ? snapshot.repo : null;
+		this.files.setRepo(repo);
+
+		const kinds = new Map<string, ChangeKind>();
+		const dirty = new Set<string>();
+		if (snapshot.kind === 'repo') {
+			for (const file of snapshot.status.files) {
+				const abs = snapshot.repo.absPath(file.path);
+				kinds.set(abs, primaryKind(file));
+				// Mark every folder between the file and the opened root.
+				for (let dir = path.dirname(abs); ; dir = path.dirname(dir)) {
+					const rel = path.relative(this.folder, dir);
+					if (rel.startsWith('..') || path.isAbsolute(rel)) break;
+					dirty.add(dir);
+					if (!rel) break;
+				}
+			}
+		}
+		this.files.setDecorations(kinds, dirty);
+
+		const watchFolder = snapshot.kind === 'none' || snapshot.kind === 'missing-folder' ? '' : snapshot.folder;
+		const key = `${watchFolder}\0${repo?.gitDir ?? ''}`;
+		if (key !== this.watchKey) {
+			this.watchKey = key;
+			this.watcher.watch(watchFolder, repo);
+		}
+	}
+
+	private setSidebarWidth(width: number) {
+		const w = clamp(width, SIDEBAR_WIDTH_RANGE.min, SIDEBAR_WIDTH_RANGE.max);
+		this.contentEl.setCssProps({ '--so-sidebar-width': `${w}px` });
+		return w;
+	}
+
+	private buildResizer(handle: HTMLElement, sidebar: HTMLElement) {
+		const settings = this.plugin.settings;
+		const persist = (width: number) => {
+			settings.sidebarWidth = width;
+			void this.plugin.saveSettings();
+		};
+
+		this.registerDomEvent(handle, 'pointerdown', (e: PointerEvent) => {
+			if (e.button !== 0) return;
+			e.preventDefault();
+			handle.setPointerCapture(e.pointerId);
+			handle.addClass('is-dragging');
+			const startX = e.clientX;
+			const startWidth = sidebar.getBoundingClientRect().width;
+			let width = startWidth;
+			const onMove = (ev: PointerEvent) => { width = this.setSidebarWidth(startWidth + ev.clientX - startX); };
+			const onUp = () => {
+				handle.removeEventListener('pointermove', onMove);
+				handle.removeEventListener('pointerup', onUp);
+				handle.removeEventListener('pointercancel', onUp);
+				handle.removeClass('is-dragging');
+				if (width !== startWidth) persist(width);
+			};
+			handle.addEventListener('pointermove', onMove);
+			handle.addEventListener('pointerup', onUp);
+			handle.addEventListener('pointercancel', onUp);
+		});
+		this.registerDomEvent(handle, 'dblclick', () => persist(this.setSidebarWidth(DEFAULT_SETTINGS.sidebarWidth)));
+		this.registerDomEvent(handle, 'keydown', (e) => {
+			const delta = e.key === 'ArrowLeft' ? -RESIZE_KEY_STEP : e.key === 'ArrowRight' ? RESIZE_KEY_STEP : 0;
+			if (!delta) return;
+			e.preventDefault();
+			persist(this.setSidebarWidth(settings.sidebarWidth + delta));
+		});
+	}
+}
