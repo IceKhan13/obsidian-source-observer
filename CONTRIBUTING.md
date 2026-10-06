@@ -88,7 +88,7 @@ A few principles hold the design together:
 
 - Keep each pull request focused on one change, and describe what it does and how you tested it.
 - Make sure `npm run build`, `npm run lint` and `npm test` pass.
-- Update the README when you add or change something users see, including the commands table and the privacy section if you run a new git command.
+- Update the README when you add a feature users should know about, and its privacy section if you run a new git command. Keep it short.
 - UI text uses sentence case and Obsidian's style: "select" rather than "click", and **bold** for labels.
 - Don't commit build output (`main.js`) or `node_modules/`.
 

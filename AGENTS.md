@@ -28,14 +28,14 @@ src/services/        state and change detection (RepoState, RepoWatcher, FileInd
 src/ui/              the view, sidebar sections, content pane and renderers, CodeMirror extensions, menus
 src/utils/           file reading, paths, icons, time, request tokens, OS integration
 tests/               *.test.ts, helpers.ts (temp git repos), obsidian-shim.ts, electron-shim.ts
-docs/images/         README screenshots
+docs/images/         README screenshot
 ```
 
 Dependencies flow one way: `ui → services → git → utils`. `git/` must not import from `services/` or `ui/` (this has caused circular imports before — put I/O helpers that need `GitRepo` in `services/`). The full annotated tree is in `CONTRIBUTING.md`; update it when you add a module.
 
 ## Non-negotiable rules
 
-- **Git stays read-only.** Only read-only git commands, always through `GitRepo` so `GLOBAL_ARGS` (`--no-optional-locks`, `--literal-pathspecs`, `core.quotepath=off`) applies. Never write to a repository, the index, refs or config. If you add a git command, add it to the list in the README's **Privacy and safety** section.
+- **Git stays read-only.** Only read-only git commands, always through `GitRepo` so `GLOBAL_ARGS` (`--no-optional-locks`, `--literal-pathspecs`, `core.quotepath=off`) applies. Never write to a repository, the index, refs or config. If you add a git command, add it to the list in the README's **Privacy** section.
 - **No network requests, no telemetry.** The plugin works offline.
 - **Never break saved data.** Command IDs, settings keys, the embed format (`source-observer` code blocks with `folder`/`file`/`lines`) and the `obsidian://source-observer` link format are public; keep them backward compatible.
 - **Don't commit build output** (`main.js`) or `node_modules/`.
@@ -75,16 +75,11 @@ Dependencies flow one way: `ui → services → git → utils`. `git/` must not 
 
 ## Documentation
 
-Update `README.md` in the same pull request when you change anything users see:
-- the **Highlights** and **Using Source Observer** sections,
-- the **Commands and shortcuts** table when adding a command,
-- the **Settings** table when adding a setting,
-- **Privacy and safety** when adding a git command,
-- **Limits and known issues** when adding a cap or a known limitation.
+`README.md` is deliberately short: what the plugin is, a feature list, usage, installation and privacy. No marketing copy. Update it in the same pull request when you add a feature users should know about, and add any new git command to its **Privacy** list.
 
 UI text and docs follow Obsidian's style guide: sentence case for headings, buttons and settings; "select" rather than "click"; **bold** for UI labels; arrows for navigation (**Settings → Community plugins**); short, jargon-free strings.
 
-Screenshots in `docs/images/` are captured in real Obsidian (default dark theme, 1440×900 at 2×, resized to 1920 px wide). Retake the affected ones when the UI changes noticeably.
+The README screenshot (`docs/images/hero.png`) is captured in real Obsidian (default dark theme, 1440×900 at 2×, resized to 1920 px wide). Retake it when the UI changes noticeably.
 
 ## Workflow
 
