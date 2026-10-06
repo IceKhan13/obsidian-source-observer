@@ -395,6 +395,98 @@
 .so-message-icon svg { width: 32px; height: 32px; }
 .so-message-detail { font-size: var(--font-ui-smaller); color: var(--text-faint); }
 
+/* ── Search in files ─────────────────────────────────────────── */
+.so-search-row {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	margin: 2px 8px 4px;
+	flex-shrink: 0;
+}
+.so-search-row .so-search-input { flex: 1; min-width: 0; margin: 0; }
+.so-search-options { display: flex; flex-shrink: 0; }
+.so-search-option {
+	padding: 2px 4px;
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller);
+	line-height: 1;
+}
+.so-search-option.is-active {
+	color: var(--text-on-accent);
+	background: var(--interactive-accent);
+}
+.so-search-summary.so-hidden { display: none; }
+.so-search-summary.so-search-error { color: var(--text-error); font-style: normal; }
+.so-search-results.so-loading { opacity: 0.6; }
+
+.so-search-chevron { display: flex; color: var(--text-faint); transition: transform 100ms ease-in-out; }
+.so-search-chevron svg { width: 12px; height: 12px; }
+.so-search-file.is-collapsed .so-search-chevron { transform: rotate(-90deg); }
+.so-search-file.is-collapsed .so-search-lines { display: none; }
+.so-search-count {
+	margin-left: auto;
+	padding: 0 5px;
+	border-radius: 8px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	background: var(--background-modifier-hover);
+}
+.so-search-line { padding-left: 28px; font-family: var(--font-monospace); font-size: var(--font-ui-smaller); }
+.so-search-line-number { flex-shrink: 0; min-width: 3ch; text-align: right; color: var(--text-faint); }
+.so-search-line-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: pre; }
+.so-search-match {
+	color: inherit;
+	background: var(--text-highlight-bg);
+	border-radius: 2px;
+}
+
+/* ── File history ────────────────────────────────────────────── */
+.so-history-file {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	padding: 2px 12px 4px;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	flex-shrink: 0;
+	min-width: 0;
+}
+.so-history-file.so-hidden { display: none; }
+.so-history-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.so-commit-row {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 0;
+	padding-left: 12px;
+}
+.so-commit-subject,
+.so-commit-meta {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.so-commit-meta { font-size: var(--font-ui-smaller); color: var(--text-faint); }
+.so-commit-hash { font-family: var(--font-monospace); }
+
+/* ── Blame gutter ────────────────────────────────────────────── */
+.so-blame-gutter { border-right: 1px solid var(--background-modifier-border); }
+.so-blame-gutter .cm-gutterElement { cursor: pointer; }
+.so-blame-entry {
+	display: flex;
+	gap: 6px;
+	width: 24ch;
+	padding: 0 8px 0 6px;
+	font-size: 0.85em;
+	color: var(--text-muted);
+	white-space: nowrap;
+}
+.so-blame-start { border-top: 1px solid var(--background-modifier-border); }
+.cm-gutterElement:first-child .so-blame-start { border-top: none; }
+.so-blame-author { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.so-blame-age { flex-shrink: 0; color: var(--text-faint); }
+.so-blame-uncommitted { color: var(--text-faint); font-style: italic; }
+.so-pane-action.so-blame-toggle.is-active { color: var(--text-accent); }
+
 /* ── Folder path modal ───────────────────────────────────────── */
 .so-path-input { width: 100%; min-width: 260px; font-family: var(--font-monospace); }
 

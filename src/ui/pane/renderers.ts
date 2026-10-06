@@ -4,8 +4,10 @@ import { Decoration, EditorView, highlightActiveLine, keymap, lineNumbers } from
 import { syntaxHighlighting } from '@codemirror/language';
 import { MergeView, unifiedMergeView } from '@codemirror/merge';
 import { gotoLine, highlightSelectionMatches, openSearchPanel, search, searchKeymap } from '@codemirror/search';
+import type { BlameCommit } from '../../git/blame';
 import type { LineRange } from '../../links/sourceLink';
 import type { DiffLayout } from '../../settings';
+import { blameGutter } from '../editor/blameGutter';
 import { diffStats, DiffStats } from '../editor/diffStats';
 import { languageFor } from '../editor/languages';
 import { diffTheme, fontTheme, obsidianHighlight, obsidianTheme } from '../editor/theme';
@@ -38,6 +40,14 @@ export abstract class PaneRenderer extends Component {
 		if (!view) return false;
 		openSearchPanel(view);
 		return true;
+	}
+
+	/** The selected text in the editor, or '' when nothing is selected. */
+	selectedText(): string {
+		const view = this.editor();
+		if (!view) return '';
+		const { from, to } = view.state.selection.main;
+		return view.state.sliceDoc(from, to);
 	}
 
 	/** Opens the go-to-line prompt; returns false when there is no editor. */
@@ -91,14 +101,16 @@ export interface EditorSelectionInfo {
 
 /**
  * Read-only, syntax-highlighted file view. The CodeMirror instance is reused
- * across files; language, font size and linked-line highlights are swapped
- * via compartments.
+ * across files; language, font size, linked-line highlights and the blame
+ * gutter are swapped via compartments.
  */
 export class CodeRenderer extends PaneRenderer {
 	private view: EditorView | null = null;
 	private language = new Compartment();
 	private font = new Compartment();
 	private highlight = new Compartment();
+	private blame = new Compartment();
+	private blameShown = false;
 
 	constructor(parent: HTMLElement, private fontSize: number) {
 		super(parent, 'so-code-view');
@@ -109,6 +121,8 @@ export class CodeRenderer extends PaneRenderer {
 			parent: this.el,
 			state: EditorState.create({
 				extensions: [
+					// First, so the blame gutter sits left of the line numbers.
+					this.blame.of([]),
 					...baseEditorExtensions(),
 					this.language.of([]),
 					this.font.of(fontTheme(this.fontSize)),
@@ -145,6 +159,9 @@ export class CodeRenderer extends PaneRenderer {
 			effects: [
 				this.language.reconfigure(languageFor(fileName)),
 				this.highlight.reconfigure(linkedLinesHighlight(doc, lines)),
+				// Blame for the old document no longer applies; keep the gutter's
+				// width until the caller supplies blame for the new one.
+				...(this.blameShown ? [this.blame.reconfigure(blameGutter([]))] : []),
 			],
 			selection,
 		});
@@ -154,6 +171,20 @@ export class CodeRenderer extends PaneRenderer {
 		}
 		view.scrollDOM.scrollTop = keepScroll ? scrollTop : 0;
 		view.scrollDOM.scrollLeft = keepScroll ? scrollLeft : 0;
+	}
+
+	/**
+	 * Shows `lines` (one entry per document line) in a blame gutter, an empty
+	 * gutter for an empty list, or removes the gutter for null.
+	 */
+	setBlame(lines: BlameCommit[] | null, onOpen?: (commit: BlameCommit) => void) {
+		this.blameShown = lines !== null;
+		this.view?.dispatch({ effects: this.blame.reconfigure(lines ? blameGutter(lines, onOpen) : []) });
+	}
+
+	/** True while the blame gutter is shown. */
+	hasBlame(): boolean {
+		return this.blameShown;
 	}
 
 	/** The selected whole lines, or the whole file when the selection is empty. */

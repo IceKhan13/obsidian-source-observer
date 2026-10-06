@@ -27,7 +27,8 @@ export class FilesSection extends Component {
 	private treeEl: HTMLElement;
 	private resultsEl: HTMLElement;
 	private searchInput: HTMLInputElement;
-	private index = new FileIndex();
+	/** Shared with content search, which reads files from it outside git repositories. */
+	readonly index = new FileIndex();
 	private searchToken = new LatestRequest();
 	private folder = '';
 	private repoKey = '';

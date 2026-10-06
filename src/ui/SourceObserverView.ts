@@ -13,6 +13,8 @@ import { promptForFolder, showFolderMenu } from './folderPicker';
 import { ContentPane } from './pane/ContentPane';
 import { ChangesSection } from './sidebar/ChangesSection';
 import { FilesSection } from './sidebar/FilesSection';
+import { HistorySection } from './sidebar/HistorySection';
+import { SearchSection } from './sidebar/SearchSection';
 
 export const VIEW_TYPE = 'source-observer';
 
@@ -37,7 +39,9 @@ export class SourceObserverView extends ItemView {
 	private state = new RepoState();
 	private pane!: ContentPane;
 	private files!: FilesSection;
+	private search!: SearchSection;
 	private changes!: ChangesSection;
+	private history!: HistorySection;
 	private watcher!: RepoWatcher;
 	private openLabel!: HTMLElement;
 	private folder = '';
@@ -49,6 +53,10 @@ export class SourceObserverView extends ItemView {
 		// clicking into the editor.
 		this.scope = new Scope(this.app.scope);
 		this.scope.register(['Mod'], 'F', () => (this.findInFile() ? false : undefined));
+		this.scope.register(['Mod', 'Shift'], 'F', () => {
+			this.searchInFiles();
+			return false;
+		});
 	}
 
 	getViewType() { return VIEW_TYPE; }
@@ -88,6 +96,17 @@ export class SourceObserverView extends ItemView {
 				showFileMenu(evt, { absPath, relPath, isDir, exists: true }, extra);
 			},
 		}));
+		this.search = this.addChild(new SearchSection(sidebar, {
+			index: this.files.index,
+			showHidden: settings.showHidden,
+			onOpenMatch: (absPath, rel, line) => {
+				this.files.select(absPath);
+				void this.pane.showFile(absPath, rel, { from: line, to: line });
+			},
+			onContextMenu: (evt, absPath, relPath) => {
+				showFileMenu(evt, { absPath, relPath, isDir: false, exists: true }, [this.fileLinkItems(absPath)]);
+			},
+		}));
 		this.changes = this.addChild(new ChangesSection(sidebar, {
 			onOpenDiff: (entry) => {
 				if (this.state.snapshot.kind !== 'repo') return;
@@ -96,6 +115,9 @@ export class SourceObserverView extends ItemView {
 			},
 			onRefresh: () => this.refreshAll(),
 			onContextMenu: (evt, entry) => this.showChangeMenu(evt, entry),
+		}));
+		this.history = this.addChild(new HistorySection(sidebar, {
+			onOpenCommit: (repo, commit, absPath, label) => { void this.pane.showCommit(repo, commit, absPath, label); },
 		}));
 
 		// ── Resize handle and content pane ───────────────────────────
@@ -112,6 +134,12 @@ export class SourceObserverView extends ItemView {
 				void this.plugin.saveSettings();
 			},
 			onLinkMenu: (evt) => this.showLinkMenu(evt),
+			getRepo: () => (this.state.snapshot.kind === 'repo' ? this.state.snapshot.repo : null),
+			onShowHistory: () => this.showFileHistory(),
+			onShow: (target) => {
+				if (target.type === 'commit') this.history.selectCommit(target.commit.hash);
+				else this.history.setFile(this.pane.currentPath());
+			},
 		}));
 
 		// ── Change detection ─────────────────────────────────────────
@@ -121,6 +149,7 @@ export class SourceObserverView extends ItemView {
 			isVisible: () => this.contentEl.isShown(),
 			onGitChange: () => {
 				void this.state.refresh();
+				this.history.refresh();
 				reloadPane();
 			},
 			onTreeChange: () => {
@@ -139,6 +168,7 @@ export class SourceObserverView extends ItemView {
 			this.pane.setFontSize(s.fontSize);
 			this.pane.setDiffLayout(s.diffLayout);
 			this.files.setShowHidden(s.showHidden);
+			this.search.setShowHidden(s.showHidden);
 		});
 		this.register(() => this.plugin.settingsEvents.offref(settingsRef));
 
@@ -165,6 +195,34 @@ export class SourceObserverView extends ItemView {
 	/** Opens the go-to-line prompt in the shown file or diff; false if nothing is shown. */
 	goToLine(): boolean {
 		return this.pane.goToLine();
+	}
+
+	/** Focuses search in files, filled with the selected text when it is on one line. */
+	searchInFiles() {
+		const selected = this.pane.selectedText();
+		this.search.focus(selected && !selected.includes('\n') ? selected : '');
+	}
+
+	/** True when the pane shows a file in a git repository, so its history applies. */
+	canShowHistory(): boolean {
+		const current = this.pane.currentPath();
+		return this.state.snapshot.kind === 'repo' && !!current && !!this.state.snapshot.repo.repoPath(current);
+	}
+
+	/** Expands the History section for the file in the pane. */
+	showFileHistory() {
+		this.history.setFile(this.pane.currentPath());
+		this.history.expand();
+	}
+
+	/** True when a file in a git repository is shown as code. */
+	canToggleBlame(): boolean {
+		return this.pane.canBlame();
+	}
+
+	/** Shows or hides the blame gutter in the code view. */
+	toggleBlame() {
+		this.pane.toggleBlame();
 	}
 
 	/** True when a file is shown as code, so a link to it or its selection can be copied. */
@@ -211,7 +269,9 @@ export class SourceObserverView extends ItemView {
 		this.openLabel.setText(path.basename(folder) || folder);
 		this.openLabel.parentElement?.setAttr('aria-label', `Open folder (current: ${folder})`);
 		this.pane.showPlaceholder();
+		this.history.setFile(null);
 		this.files.setFolder(folder);
+		this.search.setFolder(folder);
 		await this.state.open(folder);
 	}
 
@@ -265,6 +325,8 @@ export class SourceObserverView extends ItemView {
 
 		const repo = snapshot.kind === 'repo' ? snapshot.repo : null;
 		this.files.setRepo(repo);
+		this.search.setRepo(repo);
+		this.history.setRepo(repo);
 
 		const kinds = new Map<string, ChangeKind>();
 		const dirty = new Set<string>();
