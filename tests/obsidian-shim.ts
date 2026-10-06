@@ -181,7 +181,21 @@ export class MenuItem {
 	title = '';
 	icon = '';
 	callback: () => unknown = () => undefined;
-	setTitle(title: string) { this.title = title; return this; }
+	checked: boolean | null = null;
+	disabled = false;
+	/** Rendered title text; `fragment` keeps the structure of a DocumentFragment title. */
+	fragment: DocumentFragment | null = null;
+	setTitle(title: string | DocumentFragment) {
+		if (typeof title === 'string') {
+			this.title = title;
+		} else {
+			this.fragment = title;
+			this.title = Array.from(title.childNodes).map((n) => n.textContent).join('\n');
+		}
+		return this;
+	}
+	setChecked(checked: boolean | null) { this.checked = checked; return this; }
+	setDisabled(disabled: boolean) { this.disabled = disabled; return this; }
 	setIcon(icon: string) { this.icon = icon; return this; }
 	onClick(cb: () => unknown) { this.callback = cb; return this; }
 }
@@ -199,6 +213,7 @@ export class Menu {
 	}
 	addSeparator() { this.items.push(null); return this; }
 	showAtMouseEvent() { Menu.last = this; return this; }
+	showAtPosition() { Menu.last = this; return this; }
 }
 
 export class MarkdownRenderChild extends Component {

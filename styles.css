@@ -295,6 +295,41 @@
 }
 .so-branch-ab { font-family: var(--font-monospace); color: var(--text-accent); }
 
+/* Branch line as the worktree switcher */
+.so-branch.so-branch-clickable { cursor: pointer; border-radius: var(--radius-s); margin: 0 4px; padding-left: 8px; padding-right: 6px; }
+.so-branch.so-branch-clickable:hover { background: var(--nav-item-background-hover); color: var(--text-normal); }
+.so-branch.so-branch-clickable:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--background-modifier-border-focus); }
+.so-branch-worktrees {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	flex-shrink: 0;
+	padding: 0 5px;
+	border-radius: 8px;
+	font-family: var(--font-monospace);
+	color: var(--text-muted);
+	background: var(--background-modifier-hover);
+}
+.so-branch-worktrees-icon { display: flex; }
+.so-branch-worktrees-icon svg { width: 11px; height: 11px; }
+.so-branch-chevron { display: flex; flex-shrink: 0; margin-left: auto; color: var(--text-faint); }
+.so-branch-chevron svg { width: 12px; height: 12px; }
+
+/* Worktree menu items: branch, location, details */
+.so-wt-name { font-family: var(--font-monospace); }
+.so-wt-tag {
+	margin-left: 6px;
+	padding: 0 5px;
+	border-radius: 8px;
+	font-family: var(--font-interface);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-accent);
+	background: var(--background-modifier-hover);
+}
+.so-wt-location,
+.so-wt-details { font-size: var(--font-ui-smaller); color: var(--text-muted); }
+.so-wt-details { color: var(--text-faint); }
+
 .so-changes { padding-bottom: 6px; }
 
 .so-group-header {

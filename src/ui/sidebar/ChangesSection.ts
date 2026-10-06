@@ -15,6 +15,8 @@ export interface ChangesSectionOptions {
 	onOpenDiff: (entry: ChangeEntry) => void;
 	onRefresh: () => void;
 	onContextMenu?: (evt: MouseEvent, entry: ChangeEntry) => void;
+	/** Selecting the branch line, e.g. to switch worktrees; the line is inert without it. */
+	onBranchClick?: (anchor: HTMLElement) => void;
 }
 
 const GROUPS: { group: ChangeGroup; title: string }[] = [
@@ -39,6 +41,8 @@ export class ChangesSection extends Component {
 	private searchInput: HTMLInputElement;
 	private snapshot: RepoSnapshot = { kind: 'none' };
 	private selectedKey: string | null = null;
+	/** Worktrees of the repository; a badge is shown when there is more than one. */
+	private worktreeCount = 0;
 
 	constructor(parent: HTMLElement, private opts: ChangesSectionOptions) {
 		super();
@@ -58,6 +62,20 @@ export class ChangesSection extends Component {
 		});
 
 		this.branchEl = body.createDiv({ cls: 'so-branch so-hidden' });
+		const onBranchClick = opts.onBranchClick;
+		if (onBranchClick) {
+			this.branchEl.addClass('so-branch-clickable');
+			this.branchEl.setAttr('role', 'button');
+			this.branchEl.setAttr('tabindex', '0');
+			this.branchEl.setAttr('aria-haspopup', 'menu');
+			this.registerDomEvent(this.branchEl, 'click', () => onBranchClick(this.branchEl));
+			this.registerDomEvent(this.branchEl, 'keydown', (e) => {
+				if (e.key === 'Enter' || e.key === ' ') {
+					e.preventDefault();
+					onBranchClick(this.branchEl);
+				}
+			});
+		}
 		this.listEl = body.createDiv({ cls: 'so-changes so-scroll' });
 
 		attachListNav(this, this.listEl, {
@@ -67,10 +85,25 @@ export class ChangesSection extends Component {
 		this.registerDomEvent(searchInput, 'input', () => this.render());
 	}
 
+	/** The branch line, used to position the worktree menu; null while it is hidden. */
+	branchAnchor(): HTMLElement | null {
+		return this.branchEl.isShown() ? this.branchEl : null;
+	}
+
+	/** Shows how many worktrees the repository has next to the branch name. */
+	setWorktreeCount(count: number) {
+		if (count === this.worktreeCount) return;
+		this.worktreeCount = count;
+		this.renderBranch(this.snapshot.kind === 'repo' ? this.snapshot.status.branch : null);
+	}
+
 	update(snapshot: RepoSnapshot) {
 		const folderOf = (s: RepoSnapshot) => (s.kind === 'none' ? '' : s.folder);
 		// A selection only makes sense within the folder it was made in.
-		if (folderOf(snapshot) !== folderOf(this.snapshot)) this.selectedKey = null;
+		if (folderOf(snapshot) !== folderOf(this.snapshot)) {
+			this.selectedKey = null;
+			this.worktreeCount = 0;
+		}
 		this.snapshot = snapshot;
 		this.render();
 	}
@@ -168,6 +201,19 @@ export class ChangesSection extends Component {
 		} else {
 			this.branchEl.title = branch.head ? `${name} (no upstream)` : name;
 		}
+		if (!this.opts.onBranchClick) return;
+		if (this.worktreeCount > 1) {
+			const badge = this.branchEl.createSpan({
+				cls: 'so-branch-worktrees',
+				attr: { 'aria-label': `${this.worktreeCount} worktrees` },
+			});
+			setIcon(badge.createSpan({ cls: 'so-branch-worktrees-icon' }), 'git-fork');
+			badge.createSpan({ text: String(this.worktreeCount) });
+		}
+		setIcon(this.branchEl.createSpan({ cls: 'so-branch-chevron' }), 'chevron-down');
+		this.branchEl.title += this.worktreeCount > 1
+			? `\n${this.worktreeCount} worktrees — select to switch`
+			: '\nSelect to show worktrees';
 	}
 
 	private renderCounts(snapshot: RepoSnapshot) {

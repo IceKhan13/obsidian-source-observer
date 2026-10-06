@@ -12,6 +12,7 @@ A lightweight codebase viewer for [Obsidian](https://obsidian.md). Browse any fo
 - **Diffs** — syntax-highlighted, unified or side by side, with unchanged regions collapsed and `+added −removed` line counts. Staged diffs compare HEAD to the index; unstaged diffs compare the index to the working tree.
 - **Find in file and go to line** — <kbd>Mod</kbd>+<kbd>F</kbd> opens a find bar with case, regexp and whole-word options; **Go to line** accepts `42`, `42:7`, `+10` or `50%`.
 - **Live updates** — the change list, tree and open file refresh automatically when files or git state change.
+- **Worktree switcher** — select the branch line in **Changes** to list every worktree of the repository, with its branch, location, number of changed files, ahead/behind counts, and whether it is locked or missing. Choosing one opens it in place, keeping the same subfolder and the same open file when they exist there, which makes it easy to compare what parallel agents or branches did.
 - **Subfolders of a repository** — open any folder inside a repo; only changes within that folder are shown.
 - **Search** — file-name search with exact and prefix matches ranked first (respects `.gitignore` in repositories; type a `/` to match paths) and a filter for changed files.
 - **Search in files** — full-text search across the folder with **Match case**, **Match whole word** and **Use regular expression** options. Results are grouped by file with the matches highlighted; select one to open the file at that line. Uses `git grep` in repositories (so `.gitignore` is respected and binary files are skipped) and reads the files directly elsewhere.
@@ -34,8 +35,9 @@ A lightweight codebase viewer for [Obsidian](https://obsidian.md). Browse any fo
 5. To reference code in a note, select lines in a file (or select nothing for the whole file), then select the link icon in the header and choose **Copy link**, **Copy embed** or **Copy as code block**, and paste into a note. The same actions are available as commands, and **Copy link** and **Copy embed** are in the right-click menu of every file.
 6. To search file contents, press <kbd>Mod</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> in the viewer or run **Source Observer: Search in files**. Text selected on a single line is searched for straight away. Results update as you type; press <kbd>Enter</kbd> to search immediately.
 7. To see the history of the open file, select the history icon in the header or run **Source Observer: Show file history**; the **History** section follows whichever file is open. Select the blame icon or run **Source Observer: Toggle blame** to show who last changed each line, and select an entry to open its commit.
-8. Use the search icon in the **Files** and **Changes** headers to filter; press <kbd>Esc</kbd> to close the search.
-9. Drag the border between the sidebar and the viewer to resize it; double-click to reset.
+8. To switch to another worktree of the repository, select the branch line at the top of **Changes** or run **Source Observer: Switch worktree…**. A badge next to the branch name shows how many worktrees there are.
+9. Use the search icon in the **Files** and **Changes** headers to filter; press <kbd>Esc</kbd> to close the search.
+10. Drag the border between the sidebar and the viewer to resize it; double-click to reset.
 
 ### Embeds
 
@@ -57,7 +59,7 @@ Links have the form `obsidian://source-observer?folder=…&file=…&lines=…`. 
 
 ## Privacy
 
-Source Observer works entirely offline. It reads files from the folder you open and runs your local `git` executable (read-only commands such as `status`, `ls-files`, `cat-file`, `grep`, `log` and `blame`, with `--no-optional-locks` so it never writes to your repository). It makes no network requests and collects no data. Embeds read the files they name directly from disk, and opening an `obsidian://source-observer` link opens that folder in the viewer. **Reveal in Finder** and **Open in default app** hand the selected path to your operating system.
+Source Observer works entirely offline. It reads files from the folder you open and runs your local `git` executable (read-only commands such as `status`, `ls-files`, `cat-file`, `grep`, `log`, `blame` and `worktree list`, with `--no-optional-locks` so it never writes to your repository). It makes no network requests and collects no data. Embeds read the files they name directly from disk, and opening an `obsidian://source-observer` link opens that folder in the viewer. **Reveal in Finder** and **Open in default app** hand the selected path to your operating system.
 
 ## Installation
 
@@ -93,11 +95,13 @@ src/
     grep.ts                   `git grep` arguments and output parsing
     history.ts                pure parser for a file's `git log --follow`
     blame.ts                  pure parser for `git blame --porcelain`
+    worktrees.ts              pure parser for `git worktree list --porcelain`
   services/
     RepoState.ts              single-flight status refresh with stale-result protection
     RepoWatcher.ts            watches the git dir and working tree; polls only while visible
     FileIndex.ts              cached file list for search (git ls-files or a bounded walk)
     ContentSearch.ts          search in files: git grep, or reading indexed files; match previews
+    Worktrees.ts              worktree summaries (changes, ahead/behind) and folder mapping
   ui/
     SourceObserverView.ts     layout and wiring
     sidebar/                  Files, Search, Changes and History sections, tree, keyboard navigation
@@ -105,6 +109,7 @@ src/
     editor/                   CodeMirror theme, languages, diff stats, blame gutter
     embed/                    live code embeds rendered inside notes
     fileMenu.ts               right-click menu for files, folders and changes
+    worktreeMenu.ts           the worktree switcher menu
   utils/                      file reading, icons, paths, request tokens, OS integration
 ```
 

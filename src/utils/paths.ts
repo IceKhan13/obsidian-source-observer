@@ -21,3 +21,11 @@ export async function isDirectory(p: string): Promise<boolean> {
 		return false;
 	}
 }
+
+export async function isFile(p: string): Promise<boolean> {
+	try {
+		return (await fsp.stat(p)).isFile();
+	} catch {
+		return false;
+	}
+}

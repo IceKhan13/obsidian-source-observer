@@ -68,6 +68,12 @@ export function registerCommands(plugin: SourceObserverPlugin) {
 		checkCallback: (checking) => onActiveView(checking, (v) => v.canToggleBlame(), (v) => v.toggleBlame()),
 	});
 
+	plugin.addCommand({
+		id: 'switch-worktree',
+		name: 'Switch worktree…',
+		checkCallback: (checking) => onActiveView(checking, (v) => v.hasRepo(), (v) => { void v.showWorktrees(); }),
+	});
+
 	for (const { format } of COPY_FORMATS) {
 		plugin.addCommand({
 			...COPY_COMMANDS[format],
