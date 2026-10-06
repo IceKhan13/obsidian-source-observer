@@ -116,8 +116,11 @@ describe('worktree menu', () => {
 		const items = Menu.last?.items ?? [];
 		expect(items).toHaveLength(3);
 		expect(items.map((i) => [i?.checked, i?.disabled])).toEqual([[true, false], [false, false], [false, true]]);
-		expect(items[1]?.title).toBe('feat\nwt/feat\n2 changed');
-		expect(items[0]?.fragment?.querySelector('.so-wt-tag')?.textContent).toBe('main');
+		expect(items[0]?.fragment?.querySelector('.so-wt-tag')?.textContent).toBe('main worktree');
+		// Native menus use the title's plain text (regression: lines ran together).
+		expect(items[0]?.fragment?.textContent).toBe('main (main worktree) — /code/app · clean');
+		expect(items[1]?.fragment?.textContent).toBe('feat — wt/feat · 2 changed');
+		expect(items[2]?.fragment?.textContent).toBe('gone — /code/gone · missing — run git worktree prune');
 		void items[0]?.callback();
 		expect(onChoose).not.toHaveBeenCalled();
 		void items[1]?.callback();

@@ -47,12 +47,25 @@ export function showWorktreeMenu(
 	const mainPath = worktrees.find((wt) => wt.main)?.path ?? '';
 	for (const wt of worktrees) {
 		if (wt.bare) continue;
+		// Native menus (the default on macOS) show only the title's text, so
+		// hidden separators keep it readable there: "feat — wt/feat · 2 changed".
 		const title = doc.createDocumentFragment();
+		const sep = (el: HTMLElement, text: string) => el.createSpan({ cls: 'so-wt-sep', text });
 		const name = title.createDiv({ cls: 'so-wt-name', text: worktreeName(wt) });
-		if (wt.main) name.createSpan({ cls: 'so-wt-tag', text: 'main' });
-		title.createDiv({ cls: 'so-wt-location', text: worktreeLocation(wt, mainPath) });
+		if (wt.main) {
+			sep(name, ' (');
+			name.createSpan({ cls: 'so-wt-tag', text: 'main worktree' });
+			sep(name, ')');
+		}
+		const location = title.createDiv({ cls: 'so-wt-location' });
+		sep(location, ' — ');
+		location.appendText(worktreeLocation(wt, mainPath));
 		const details = worktreeDetails(wt);
-		if (details) title.createDiv({ cls: 'so-wt-details', text: details });
+		if (details) {
+			const detailsEl = title.createDiv({ cls: 'so-wt-details' });
+			sep(detailsEl, ' · ');
+			detailsEl.appendText(details);
+		}
 		menu.addItem((item) => {
 			item.setTitle(title)
 				.setIcon(wt.locked !== null ? 'lock' : 'git-branch')
