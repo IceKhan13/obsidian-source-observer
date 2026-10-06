@@ -82,7 +82,7 @@ A few principles hold the design together:
 - **Latest request wins.** Async loads go through a `LatestRequest` token (`utils/latest.ts`), so a slow load can never replace a newer selection.
 - **Bounded work.** File sizes, search results, history and file indexes are capped, and watchers poll only while the view is visible.
 
-`AGENTS.md` has more conventions for Obsidian plugins, including manifest and release rules.
+`AGENTS.md` sums up these conventions for coding agents, together with Obsidian API and git pitfalls that are easy to hit — worth a read for human contributors too.
 
 ## Pull requests
 
