@@ -1,5 +1,6 @@
 import { readViewableFile, LoadedContent } from '../utils/content';
 import type { GitRepo } from './GitRepo';
+import type { FileCommit } from './history';
 import type { ChangeEntry } from './status';
 
 export interface DiffSides {
@@ -34,5 +35,18 @@ export async function loadDiffSides(repo: GitRepo, entry: ChangeEntry): Promise<
 		return { original: { kind: 'missing' }, modified: await worktree() };
 	}
 	const [original, modified] = await Promise.all([repo.readBlob(`:${file.path}`), worktree()]);
+	return { original, modified };
+}
+
+/**
+ * Loads the file before and after `commit`: its first parent (at the path
+ * before a rename) → the commit. Either side is `missing` when the file was
+ * added or deleted, or for the root commit.
+ */
+export async function loadCommitSides(repo: GitRepo, commit: FileCommit): Promise<DiffSides> {
+	const [original, modified] = await Promise.all([
+		repo.readBlob(`${commit.hash}^:${commit.origPath ?? commit.path}`),
+		repo.readBlob(`${commit.hash}:${commit.path}`),
+	]);
 	return { original, modified };
 }

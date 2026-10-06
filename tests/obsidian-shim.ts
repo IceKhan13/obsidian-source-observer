@@ -38,6 +38,9 @@ function installDomHelpers() {
 	proto.empty = function (this: Node) {
 		while (this.firstChild) this.removeChild(this.firstChild);
 	};
+	proto.appendText = function (this: Node, text: string) {
+		this.appendChild((this.ownerDocument ?? document).createTextNode(text));
+	};
 	proto.setText = function (this: Node, text: string) {
 		this.textContent = text;
 	};

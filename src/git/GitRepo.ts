@@ -1,6 +1,9 @@
-import { execFile } from 'child_process';
+import { execFile, spawn } from 'child_process';
 import * as path from 'path';
 import { decodeContent, LoadedContent, MAX_VIEW_BYTES } from '../utils/content';
+import { BlameCommit, parseBlame } from './blame';
+import { GrepHit, grepArgs, GrepOptions, parseGrepLine } from './grep';
+import { FileCommit, LOG_FORMAT, parseLog } from './history';
 import { parseStatusV2, RepoStatus } from './status';
 
 /**
@@ -45,6 +48,73 @@ function exec(cwd: string, args: string[], maxBuffer: number): Promise<ExecResul
 
 async function execText(cwd: string, args: string[]): Promise<string> {
 	return (await exec(cwd, args, MAX_TEXT_OUTPUT)).stdout.toString('utf-8');
+}
+
+/**
+ * Runs `git grep` and parses hits as they stream in, stopping git once
+ * `limit` hits were read or `signal` is aborted. Exit code 1 means no matches.
+ */
+function streamGrep(
+	cwd: string,
+	args: string[],
+	limit: number,
+	signal?: AbortSignal,
+): Promise<{ hits: GrepHit[]; truncated: boolean }> {
+	return new Promise((resolve, reject) => {
+		const hits: GrepHit[] = [];
+		let truncated = false;
+		let settled = false;
+		let pending: Buffer = Buffer.alloc(0);
+		let stderr = '';
+		const child = spawn('git', [...GLOBAL_ARGS, ...args], { cwd, windowsHide: true });
+
+		const finish = (err?: Error) => {
+			if (settled) return;
+			settled = true;
+			signal?.removeEventListener('abort', onAbort);
+			if (err) reject(err);
+			else resolve({ hits, truncated });
+		};
+		const stop = () => {
+			child.stdout.removeAllListeners('data');
+			child.kill();
+		};
+		const onAbort = () => {
+			stop();
+			finish(new GitError('Search cancelled'));
+		};
+		if (signal?.aborted) {
+			onAbort();
+			return;
+		}
+		signal?.addEventListener('abort', onAbort);
+
+		child.stdout.on('data', (chunk: Buffer) => {
+			pending = pending.length ? Buffer.concat([pending, chunk]) : chunk;
+			let start = 0;
+			for (let nl = pending.indexOf(10); nl >= 0; nl = pending.indexOf(10, start)) {
+				const hit = parseGrepLine(pending.toString('utf-8', start, nl));
+				start = nl + 1;
+				if (!hit) continue;
+				if (hits.length >= limit) {
+					truncated = true;
+					stop();
+					finish();
+					return;
+				}
+				hits.push(hit);
+			}
+			pending = pending.subarray(start);
+		});
+		child.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
+		child.on('error', (err: NodeJS.ErrnoException) => {
+			finish(new GitError(err.code === 'ENOENT' ? 'Git is not installed or not on PATH' : err.message, err.code === 'ENOENT'));
+		});
+		child.on('close', (code) => {
+			if (code === 0 || code === 1 || truncated) finish();
+			else finish(new GitError(stderr.trim() || `git grep exited with code ${code ?? 'unknown'}`));
+		});
+	});
 }
 
 export type OpenResult =
@@ -122,6 +192,36 @@ export class GitRepo {
 	}
 
 	/**
+	 * Searches file contents in the opened folder, including untracked files,
+	 * returning at most `limit` matching lines.
+	 */
+	grep(opts: GrepOptions, limit: number, signal?: AbortSignal): Promise<{ hits: GrepHit[]; truncated: boolean }> {
+		return streamGrep(this.root, grepArgs(opts, this.scope()), limit, signal);
+	}
+
+	/**
+	 * Commits touching `repoPath`, newest first, following renames. Returns
+	 * an empty list for untracked files and repositories without commits.
+	 */
+	async fileHistory(repoPath: string, limit: number): Promise<FileCommit[]> {
+		let out: string;
+		try {
+			out = await execText(this.root, [
+				'log', '--follow', '-z', '--name-status', '--no-color', '--no-show-signature',
+				`--max-count=${limit}`, `--format=${LOG_FORMAT}`, '--', repoPath,
+			]);
+		} catch {
+			return [];
+		}
+		return parseLog(out, repoPath);
+	}
+
+	/** Blames the working-tree version of `repoPath`; one entry per line. */
+	async blame(repoPath: string): Promise<BlameCommit[]> {
+		return parseBlame(await execText(this.root, ['blame', '--porcelain', '--', repoPath]));
+	}
+
+	/**
 	 * Reads a blob such as `HEAD:path` or `:path` (index). Returns `missing`
 	 * when the object does not exist, e.g. a file added since HEAD.
 	 */
@@ -139,6 +239,13 @@ export class GitRepo {
 		} catch (err) {
 			return { kind: 'error', message: err instanceof Error ? err.message : String(err) };
 		}
+	}
+
+	/** Root-relative git path for a file under the opened folder, or null outside it. */
+	repoPath(absPath: string): string | null {
+		const rel = path.relative(this.folder, absPath);
+		if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return null;
+		return this.prefix + rel.split(path.sep).join('/');
 	}
 
 	/** Converts a root-relative git path to one relative to the opened folder. */

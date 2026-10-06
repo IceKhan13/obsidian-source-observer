@@ -14,6 +14,9 @@ A lightweight codebase viewer for [Obsidian](https://obsidian.md). Browse any fo
 - **Live updates** — the change list, tree and open file refresh automatically when files or git state change.
 - **Subfolders of a repository** — open any folder inside a repo; only changes within that folder are shown.
 - **Search** — file-name search with exact and prefix matches ranked first (respects `.gitignore` in repositories; type a `/` to match paths) and a filter for changed files.
+- **Search in files** — full-text search across the folder with **Match case**, **Match whole word** and **Use regular expression** options. Results are grouped by file with the matches highlighted; select one to open the file at that line. Uses `git grep` in repositories (so `.gitignore` is respected and binary files are skipped) and reads the files directly elsewhere.
+- **File history** — the commits that changed the open file, newest first and following renames. Select a commit to see what it changed in the file.
+- **Blame** — show who last changed each line, and when, in a gutter beside the code. Select an entry to see that commit's change.
 - **Keyboard navigation** — arrow keys, Home/End, Enter, and Left/Right to collapse and expand folders.
 - **Links to code** — copy a link to a file or the selected lines; opening it in a note jumps to the file in Source Observer with those lines highlighted.
 - **Live code embeds** — embed a file or a range of lines in a note. The excerpt is syntax-highlighted, keeps its real line numbers, and updates when the file changes.
@@ -29,8 +32,10 @@ A lightweight codebase viewer for [Obsidian](https://obsidian.md). Browse any fo
 3. Select a file in **Files** to view it, or a file in **Changes** to view its diff. In a diff, use the icons in the header to switch between unified and side-by-side layout, or to open the full file. The default layout is in **Settings → Source Observer → Diff layout**.
 4. Press <kbd>Mod</kbd>+<kbd>F</kbd>, or select the search icon in the header, to find text in the open file or diff. Run **Source Observer: Go to line** to jump to a line; both commands can be given hotkeys in **Settings → Hotkeys**.
 5. To reference code in a note, select lines in a file (or select nothing for the whole file), then select the link icon in the header and choose **Copy link**, **Copy embed** or **Copy as code block**, and paste into a note. The same actions are available as commands, and **Copy link** and **Copy embed** are in the right-click menu of every file.
-6. Use the search icon in each section header to filter; press <kbd>Esc</kbd> to close the search.
-7. Drag the border between the sidebar and the viewer to resize it; double-click to reset.
+6. To search file contents, press <kbd>Mod</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> in the viewer or run **Source Observer: Search in files**. Text selected on a single line is searched for straight away. Results update as you type; press <kbd>Enter</kbd> to search immediately.
+7. To see the history of the open file, select the history icon in the header or run **Source Observer: Show file history**; the **History** section follows whichever file is open. Select the blame icon or run **Source Observer: Toggle blame** to show who last changed each line, and select an entry to open its commit.
+8. Use the search icon in the **Files** and **Changes** headers to filter; press <kbd>Esc</kbd> to close the search.
+9. Drag the border between the sidebar and the viewer to resize it; double-click to reset.
 
 ### Embeds
 
@@ -52,7 +57,7 @@ Links have the form `obsidian://source-observer?folder=…&file=…&lines=…`. 
 
 ## Privacy
 
-Source Observer works entirely offline. It reads files from the folder you open and runs your local `git` executable (read-only commands such as `status`, `ls-files` and `cat-file`, with `--no-optional-locks` so it never writes to your repository). It makes no network requests and collects no data. Embeds read the files they name directly from disk, and opening an `obsidian://source-observer` link opens that folder in the viewer. **Reveal in Finder** and **Open in default app** hand the selected path to your operating system.
+Source Observer works entirely offline. It reads files from the folder you open and runs your local `git` executable (read-only commands such as `status`, `ls-files`, `cat-file`, `grep`, `log` and `blame`, with `--no-optional-locks` so it never writes to your repository). It makes no network requests and collects no data. Embeds read the files they name directly from disk, and opening an `obsidian://source-observer` link opens that folder in the viewer. **Reveal in Finder** and **Open in default app** hand the selected path to your operating system.
 
 ## Installation
 
@@ -84,16 +89,20 @@ src/
   git/
     GitRepo.ts                resolves root/git dir/prefix; runs git with --no-optional-locks
     status.ts                 pure parser for `git status --porcelain=v2`
-    diffSources.ts            loads the two sides of a diff
+    diffSources.ts            loads the two sides of a diff (changes and commits)
+    grep.ts                   `git grep` arguments and output parsing
+    history.ts                pure parser for a file's `git log --follow`
+    blame.ts                  pure parser for `git blame --porcelain`
   services/
     RepoState.ts              single-flight status refresh with stale-result protection
     RepoWatcher.ts            watches the git dir and working tree; polls only while visible
     FileIndex.ts              cached file list for search (git ls-files or a bounded walk)
+    ContentSearch.ts          search in files: git grep, or reading indexed files; match previews
   ui/
     SourceObserverView.ts     layout and wiring
-    sidebar/                  Files and Changes sections, tree, keyboard navigation
+    sidebar/                  Files, Search, Changes and History sections, tree, keyboard navigation
     pane/                     content pane and its renderers (code, diff, message)
-    editor/                   CodeMirror theme, languages, diff stats
+    editor/                   CodeMirror theme, languages, diff stats, blame gutter
     embed/                    live code embeds rendered inside notes
     fileMenu.ts               right-click menu for files, folders and changes
   utils/                      file reading, icons, paths, request tokens, OS integration

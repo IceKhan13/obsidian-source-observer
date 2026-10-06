@@ -48,6 +48,26 @@ export function registerCommands(plugin: SourceObserverPlugin) {
 		checkCallback: (checking) => onActiveView(checking, (v) => v.hasEditor(), (v) => v.goToLine()),
 	});
 
+	plugin.addCommand({
+		id: 'search-in-files',
+		name: 'Search in files',
+		callback: () => {
+			void plugin.activateView().then((view) => view?.searchInFiles());
+		},
+	});
+
+	plugin.addCommand({
+		id: 'show-file-history',
+		name: 'Show file history',
+		checkCallback: (checking) => onActiveView(checking, (v) => v.canShowHistory(), (v) => v.showFileHistory()),
+	});
+
+	plugin.addCommand({
+		id: 'toggle-blame',
+		name: 'Toggle blame',
+		checkCallback: (checking) => onActiveView(checking, (v) => v.canToggleBlame(), (v) => v.toggleBlame()),
+	});
+
 	for (const { format } of COPY_FORMATS) {
 		plugin.addCommand({
 			...COPY_COMMANDS[format],
