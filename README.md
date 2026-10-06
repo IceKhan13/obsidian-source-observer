@@ -1,45 +1,120 @@
 # Source Observer
 
-A lightweight codebase viewer for [Obsidian](https://obsidian.md). Browse any folder on disk, read files with syntax highlighting, and review git changes — without leaving your vault.
+[![Build](https://github.com/IceKhan13/obsidian-source-observer/actions/workflows/lint.yml/badge.svg)](https://github.com/IceKhan13/obsidian-source-observer/actions/workflows/lint.yml)
+[![Release](https://img.shields.io/github/v/release/IceKhan13/obsidian-source-observer?sort=semver)](https://github.com/IceKhan13/obsidian-source-observer/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-![Source Observer](obsidian-plugin.png)
+**A read-only code viewer and git reviewer inside [Obsidian](https://obsidian.md).** Open any folder on your computer, read code with syntax highlighting, review changes, search, follow history — and link or embed live code in your notes.
 
-## Features
+It is built for two kinds of work:
 
-- **File tree** — navigate any folder with file-type icons; files and folders are coloured by git status, and folders containing changes are marked with a dot. The tree updates itself when files are created or deleted.
-- **Syntax highlighting** — follows your Obsidian theme. Supports JS/TS, Python, Rust, Go, Ruby, Java, Kotlin, Scala, C/C++, C#, Swift, PHP, Lua, SQL, shell, CSS, HTML, Vue/Svelte, JSON, YAML, TOML, Markdown, Dockerfiles and more.
-- **Git changes** — changed files grouped into **Merge conflicts**, **Staged** and **Changes**, with the current branch and ahead/behind counts.
-- **Diffs** — syntax-highlighted, unified or side by side, with unchanged regions collapsed and `+added −removed` line counts. Staged diffs compare HEAD to the index; unstaged diffs compare the index to the working tree.
-- **Find in file and go to line** — <kbd>Mod</kbd>+<kbd>F</kbd> opens a find bar with case, regexp and whole-word options; **Go to line** accepts `42`, `42:7`, `+10` or `50%`.
-- **Live updates** — the change list, tree and open file refresh automatically when files or git state change.
-- **Worktree switcher** — select the branch line in **Changes** to list every worktree of the repository, with its branch, location, number of changed files, ahead/behind counts, and whether it is locked or missing. Choosing one opens it in place, keeping the same subfolder and the same open file when they exist there, which makes it easy to compare what parallel agents or branches did.
-- **Subfolders of a repository** — open any folder inside a repo; only changes within that folder are shown.
-- **Search** — file-name search with exact and prefix matches ranked first (respects `.gitignore` in repositories; type a `/` to match paths) and a filter for changed files.
-- **Search in files** — full-text search across the folder with **Match case**, **Match whole word** and **Use regular expression** options. Results are grouped by file with the matches highlighted; select one to open the file at that line. Uses `git grep` in repositories (so `.gitignore` is respected and binary files are skipped) and reads the files directly elsewhere.
-- **File history** — the commits that changed the open file, newest first and following renames. Select a commit to see what it changed in the file.
-- **Blame** — show who last changed each line, and when, in a gutter beside the code. Select an entry to see that commit's change.
-- **Keyboard navigation** — arrow keys, Home/End, Enter, and Left/Right to collapse and expand folders.
-- **Links to code** — copy a link to a file or the selected lines; opening it in a note jumps to the file in Source Observer with those lines highlighted.
-- **Live code embeds** — embed a file or a range of lines in a note. The excerpt is syntax-highlighted, keeps its real line numbers, and updates when the file changes.
-- **Copy as code block** — paste a static, fenced copy of the selection into a note, followed by a link back to the source.
-- **Context menu** — right-click a file, folder or change to copy its path or relative path, reveal it in Finder or the system file manager, or open it in its default app.
-- **Recent folders** and a resizable sidebar.
-- **Safe with large and binary files** — files over 2 MB and binary files show a message instead of being loaded.
+- **Thinking about code in your notes** — design docs, code-reading notes and dev journals that link to and embed the real source, instead of pasted snippets that go stale.
+- **Keeping an eye on changes** — your own uncommitted work, or what coding agents are doing in parallel worktrees, without switching to an IDE.
 
-## Usage
+Source Observer never modifies your code or your repository, makes no network requests, and works entirely offline.
 
-1. Select the `</>` icon in the ribbon or run **Source Observer: Open** from the command palette.
-2. Select the folder button at the top of the sidebar, then **Browse…**, **Enter path…**, or a recent folder. You can also run **Source Observer: Open folder…**.
-3. Select a file in **Files** to view it, or a file in **Changes** to view its diff. In a diff, use the icons in the header to switch between unified and side-by-side layout, or to open the full file. The default layout is in **Settings → Source Observer → Diff layout**.
-4. Press <kbd>Mod</kbd>+<kbd>F</kbd>, or select the search icon in the header, to find text in the open file or diff. Run **Source Observer: Go to line** to jump to a line; both commands can be given hotkeys in **Settings → Hotkeys**.
-5. To reference code in a note, select lines in a file (or select nothing for the whole file), then select the link icon in the header and choose **Copy link**, **Copy embed** or **Copy as code block**, and paste into a note. The same actions are available as commands, and **Copy link** and **Copy embed** are in the right-click menu of every file.
-6. To search file contents, press <kbd>Mod</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> in the viewer or run **Source Observer: Search in files**. Text selected on a single line is searched for straight away. Results update as you type; press <kbd>Enter</kbd> to search immediately.
-7. To see the history of the open file, select the history icon in the header or run **Source Observer: Show file history**; the **History** section follows whichever file is open. Select the blame icon or run **Source Observer: Toggle blame** to show who last changed each line, and select an entry to open its commit.
-8. To switch to another worktree of the repository, select the branch line at the top of **Changes** or run **Source Observer: Switch worktree…**. A badge next to the branch name shows how many worktrees there are.
-9. Use the search icon in the **Files** and **Changes** headers to filter; press <kbd>Esc</kbd> to close the search.
-10. Drag the border between the sidebar and the viewer to resize it; double-click to reset.
+![Source Observer showing the file tree with git status, the list of changes and a syntax-highlighted diff](docs/images/hero.png)
 
-### Embeds
+## Highlights
+
+### Browse and read
+
+- A file tree for any folder, with file-type icons and git status colours; folders that contain changes are marked with a dot.
+- Syntax highlighting that follows your Obsidian theme, for JS/TS, Python, Rust, Go, Ruby, Java, Kotlin, Scala, C/C++, C#, Swift, PHP, Lua, SQL, shell, CSS, HTML, Vue, Svelte, JSON, YAML, TOML, Markdown, Dockerfiles and more.
+- **Find in file** with case, whole-word and regular-expression options, and **Go to line** (`42`, `42:7`, `+10` or `50%`).
+- Open a whole repository or any folder inside one; only that folder's files and changes are shown.
+- Everything refreshes by itself when files or git state change.
+
+### Review changes
+
+- Changed files grouped into **Merge conflicts**, **Staged** and **Changes**, with the current branch and how far it is ahead of or behind its upstream.
+- Syntax-highlighted diffs, unified or side by side, with unchanged regions collapsed and `+added −removed` counts. Staged diffs compare `HEAD` with the index; unstaged diffs compare the index with your files.
+
+### Search
+
+- **Search in files** across the whole folder, with **Match case**, **Match whole word** and **Use regular expression**. Results are grouped by file with the matches highlighted; select one to open the file at that line. In a repository it uses `git grep`, so `.gitignore` is respected and binary files are skipped.
+- Quick file-name search in **Files** (type a `/` to match paths), and a filter for **Changes**.
+
+![Search in files: results grouped by file, with the selected match open in the viewer](docs/images/search.png)
+
+### History and blame
+
+- **History** lists the commits that changed the open file, newest first and following renames. Select a commit to see exactly what it changed in that file.
+- **Blame** shows who last changed each line, and when, in a gutter beside the code. Select an entry to open that commit's change.
+
+![The blame gutter beside the code, and the History section listing the file's commits](docs/images/blame.png)
+
+![A commit selected in History, showing what it changed in the file](docs/images/history.png)
+
+### Worktrees for parallel work
+
+Select the branch name at the top of **Changes** to list every worktree of the repository — handy when several coding agents or branches are in flight at once. Each entry shows its branch, where it lives, how many files it has changed, how far it is ahead or behind, and whether it is locked or missing. Choose one to open it in place: the same subfolder and the same file stay open, so comparing versions takes one click.
+
+![The worktree menu listing the main worktree and three agent worktrees with their changes and status](docs/images/worktrees.png)
+
+### Code in your notes
+
+- **Copy link** — a link to a file or the selected lines. Opening it jumps to that spot in Source Observer, with the lines highlighted.
+- **Copy embed** — a live excerpt that keeps its real line numbers and updates when the file changes.
+- **Copy as code block** — a static, fenced copy of the selection, followed by a link back to the source.
+
+![A note with a live code embed and a link to code, next to Source Observer showing the linked lines](docs/images/notes.png)
+
+## Quick start
+
+1. Install **Source Observer** from **Settings → Community plugins → Browse** and enable it.
+2. Select the `</>` icon in the ribbon, or run **Source Observer: Open** from the command palette.
+3. Select **Open folder…** at the top of the sidebar, then **Browse…** or **Enter path…** to choose a folder or git repository on your computer.
+
+Select a file in **Files** to read it, or a file in **Changes** to see its diff.
+
+## Using Source Observer
+
+### The sidebar
+
+| Section | What it shows |
+| --- | --- |
+| **Files** | The folder as a tree. Use the search icon to find files by name. |
+| **Search** | Search inside files. Collapsed until you need it. |
+| **Changes** | Conflicts, staged and unstaged changes, the current branch and the worktree switcher. |
+| **History** | Commits that changed the open file. Collapsed until you need it; it follows whichever file is open. |
+
+Drag the border between the sidebar and the viewer to resize it; double-click it to reset. Lists support the arrow keys, <kbd>Home</kbd>, <kbd>End</kbd> and <kbd>Enter</kbd>; in trees, <kbd>←</kbd> and <kbd>→</kbd> collapse and expand folders.
+
+### The viewer header
+
+The icons above a file or diff depend on what is shown:
+
+- **Copy link** — copy a link, an embed or a code block for the file or the selected lines.
+- **Show file history** and **Toggle blame** — for files in a git repository.
+- **Show side by side** or **Show unified** — switch the diff layout.
+- **Copy commit hash** — when a commit from **History** is shown.
+- **Open file** — open the whole file from a diff.
+- **Find in file**.
+
+Right-click a file, folder or change for **Copy path**, **Copy relative path**, **Reveal in Finder** (**Show in system explorer** on Windows and Linux), **Open in default app**, **Copy link** and **Copy embed**.
+
+### Commands and shortcuts
+
+| Command | Shortcut |
+| --- | --- |
+| **Source Observer: Open** | |
+| **Source Observer: Open folder…** | |
+| **Source Observer: Search in files** | <kbd>Mod</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> in the viewer |
+| **Source Observer: Find in file** | <kbd>Mod</kbd>+<kbd>F</kbd> in the viewer |
+| **Source Observer: Go to line** | |
+| **Source Observer: Show file history** | |
+| **Source Observer: Toggle blame** | |
+| **Source Observer: Switch worktree…** | |
+| **Source Observer: Copy link to file or selection** | |
+| **Source Observer: Copy embed of file or selection** | |
+| **Source Observer: Copy file or selection as code block** | |
+
+Assign your own shortcuts in **Settings → Hotkeys**. <kbd>Mod</kbd> is <kbd>Cmd</kbd> on macOS and <kbd>Ctrl</kbd> on Windows and Linux.
+
+### Links and embeds
+
+To reference code, select lines in a file (or select nothing for the whole file), select the link icon in the header, and choose **Copy link**, **Copy embed** or **Copy as code block**. Then paste into any note.
 
 An embed is a code block with the `source-observer` language:
 
@@ -51,70 +126,54 @@ lines: 40-75
 ```
 ````
 
-- `file` is required. It is relative to `folder`, or an absolute path (`~` is expanded), in which case `folder` can be left out.
-- `lines` is optional: a single line (`12`) or a range (`40-75`). Without it the whole file is embedded.
+- `file` is required. It is relative to `folder`, or an absolute path (a leading `~` means your home folder), in which case `folder` can be left out.
+- `lines` is optional: a single line (`12`) or a range (`40-75`). Without it, the whole file is embedded.
 - Select the header of an embed to open the file in Source Observer at those lines.
 
-Links have the form `obsidian://source-observer?folder=…&file=…&lines=…`. Both links and embeds use absolute paths, so they work on the computer they were created on.
+A link looks like `obsidian://source-observer?folder=…&file=…&lines=…` and works anywhere Obsidian opens links.
 
-## Privacy
+## Settings
 
-Source Observer works entirely offline. It reads files from the folder you open and runs your local `git` executable (read-only commands such as `status`, `ls-files`, `cat-file`, `grep`, `log`, `blame` and `worktree list`, with `--no-optional-locks` so it never writes to your repository). It makes no network requests and collects no data. Embeds read the files they name directly from disk, and opening an `obsidian://source-observer` link opens that folder in the viewer. **Reveal in Finder** and **Open in default app** hand the selected path to your operating system.
+In **Settings → Source Observer**:
+
+| Setting | Description | Default |
+| --- | --- | --- |
+| **Font size** | Size of code and diff text, from 10 to 20 pixels. | 13 |
+| **Diff layout** | **Unified** or **Side by side**. You can also switch from the diff header. | Unified |
+| **Show hidden files** | Show files and folders whose names start with a dot, in the tree and in search. | On |
+| **Recent folders** | Select **Clear** to forget the folders listed under **Open folder…**. | |
+
+## Requirements
+
+- Obsidian 1.7.2 or later on desktop: macOS, Windows or Linux. Source Observer reads files from disk and runs `git`, so it is not available on mobile.
+- [Git](https://git-scm.com/) on your `PATH` for changes, diffs, history, blame and worktrees. Without git you can still browse, read and search any folder.
 
 ## Installation
 
-1. Copy `main.js`, `styles.css`, and `manifest.json` into `<vault>/.obsidian/plugins/source-observer/`.
-2. Enable the plugin in **Settings → Community plugins**.
+**From Obsidian** (recommended): open **Settings → Community plugins → Browse**, search for **Source Observer**, then select **Install** and **Enable**.
 
-The plugin is desktop-only because it reads the file system and runs `git`.
+**Manually**: download `main.js`, `manifest.json` and `styles.css` from the [latest release](https://github.com/IceKhan13/obsidian-source-observer/releases/latest) into `<vault>/.obsidian/plugins/source-observer/`, then enable the plugin in **Settings → Community plugins**.
 
-## Development
+## Privacy and safety
 
-```bash
-npm install
-npm run dev    # watch mode
-npm run build  # type-check and production build
-npm run lint
-npm test       # unit, git integration and DOM tests (vitest)
-```
+- **Offline.** Source Observer makes no network requests and collects no data.
+- **Read-only.** It reads files from the folder you open and runs your local `git` with read-only commands only — `status`, `ls-files`, `cat-file`, `grep`, `log`, `blame` and `worktree list` — with `--no-optional-locks`, so it never writes to your repository, not even to git's index.
+- **Explicit hand-offs.** **Reveal in Finder** and **Open in default app** pass the selected path to your operating system. Embeds read the files they name, and opening an `obsidian://source-observer` link opens that folder in the viewer.
 
-### Architecture
+## Limits and known issues
 
-```
-src/
-  main.ts                     plugin lifecycle
-  commands.ts                 command palette commands
-  settings.ts                 settings model, defaults, validation
-  links/
-    sourceLink.ts             link, embed and code block formats; embed parsing
-    register.ts               obsidian:// handler and code block processor
-  git/
-    GitRepo.ts                resolves root/git dir/prefix; runs git with --no-optional-locks
-    status.ts                 pure parser for `git status --porcelain=v2`
-    diffSources.ts            loads the two sides of a diff (changes and commits)
-    grep.ts                   `git grep` arguments and output parsing
-    history.ts                pure parser for a file's `git log --follow`
-    blame.ts                  pure parser for `git blame --porcelain`
-    worktrees.ts              pure parser for `git worktree list --porcelain`
-  services/
-    RepoState.ts              single-flight status refresh with stale-result protection
-    RepoWatcher.ts            watches the git dir and working tree; polls only while visible
-    FileIndex.ts              cached file list for search (git ls-files or a bounded walk)
-    ContentSearch.ts          search in files: git grep, or reading indexed files; match previews
-    Worktrees.ts              worktree summaries (changes, ahead/behind) and folder mapping
-  ui/
-    SourceObserverView.ts     layout and wiring
-    sidebar/                  Files, Search, Changes and History sections, tree, keyboard navigation
-    pane/                     content pane and its renderers (code, diff, message)
-    editor/                   CodeMirror theme, languages, diff stats, blame gutter
-    embed/                    live code embeds rendered inside notes
-    fileMenu.ts               right-click menu for files, folders and changes
-    worktreeMenu.ts           the worktree switcher menu
-  utils/                      file reading, icons, paths, request tokens, OS integration
-```
+- **Links and embeds use absolute paths**, so they work on the computer they were made on. On another computer they show "file not found" unless the code is at the same path there.
+- Files over **2 MB** and binary files show a message instead of their contents.
+- **Search in files** stops after **2,000** matching lines, and file-name search indexes up to **50,000** files. **History** lists the latest **300** commits of a file.
+- While the viewer is focused, <kbd>Mod</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> searches the open folder instead of opening Obsidian's vault search.
+- If your worktrees live inside the repository (for example in `.claude/worktrees/`), add that folder to `.gitignore` or `.git/info/exclude`. Otherwise git reports them as untracked folders in the main worktree.
 
-Each renderer in the content pane is an Obsidian `Component`, so swapping what is shown always tears down the previous editor, DOM and listeners. All loads into the pane go through one "latest request wins" token, so a slow load can never replace a newer selection.
+Found a bug or have an idea? [Open an issue](https://github.com/IceKhan13/obsidian-source-observer/issues).
+
+## Contributing
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setting up a development vault, running the tests, and an overview of the architecture.
 
 ## License
 
-MIT
+[MIT](LICENSE)
