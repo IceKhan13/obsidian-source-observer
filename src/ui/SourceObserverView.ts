@@ -6,10 +6,12 @@ import { ChangeEntry, ChangeKind, primaryKind } from '../git/status';
 import { COPY_FORMATS, CopyFormat, describeLocation, formatForCopy, LineRange, SourceLocation } from '../links/sourceLink';
 import { RepoSnapshot, RepoState } from '../services/RepoState';
 import { RepoWatcher } from '../services/RepoWatcher';
-import { isDirectory, normalizeFolderInput } from '../utils/paths';
+import { equivalentFolder, loadWorktreeSummaries } from '../services/Worktrees';
+import { isDirectory, isFile, normalizeFolderInput } from '../utils/paths';
 import { copyToClipboard } from '../utils/system';
 import { FileMenuItem, showFileMenu } from './fileMenu';
 import { promptForFolder, showFolderMenu } from './folderPicker';
+import { showWorktreeMenu } from './worktreeMenu';
 import { ContentPane } from './pane/ContentPane';
 import { ChangesSection } from './sidebar/ChangesSection';
 import { FilesSection } from './sidebar/FilesSection';
@@ -46,6 +48,8 @@ export class SourceObserverView extends ItemView {
 	private openLabel!: HTMLElement;
 	private folder = '';
 	private watchKey: string | null = null;
+	/** Common git dir whose worktree count is shown, so it is read once per repository. */
+	private worktreeKey: string | null = null;
 
 	constructor(leaf: WorkspaceLeaf, private plugin: SourceObserverPlugin) {
 		super(leaf);
@@ -115,6 +119,7 @@ export class SourceObserverView extends ItemView {
 			},
 			onRefresh: () => this.refreshAll(),
 			onContextMenu: (evt, entry) => this.showChangeMenu(evt, entry),
+			onBranchClick: (anchor) => { void this.showWorktrees(anchor); },
 		}));
 		this.history = this.addChild(new HistorySection(sidebar, {
 			onOpenCommit: (repo, commit, absPath, label) => { void this.pane.showCommit(repo, commit, absPath, label); },
@@ -213,6 +218,49 @@ export class SourceObserverView extends ItemView {
 	showFileHistory() {
 		this.history.setFile(this.pane.currentPath());
 		this.history.expand();
+	}
+
+	/** True when the opened folder is in a git repository, so it has worktrees. */
+	hasRepo(): boolean {
+		return this.state.snapshot.kind === 'repo';
+	}
+
+	/**
+	 * Lists the repository's worktrees in a menu below `anchor` (the branch
+	 * line, or the top of the view) and opens the one chosen.
+	 */
+	async showWorktrees(anchor: HTMLElement | null = this.changes.branchAnchor()) {
+		if (this.state.snapshot.kind !== 'repo') return;
+		const repo = this.state.snapshot.repo;
+		let worktrees;
+		try {
+			worktrees = await loadWorktreeSummaries(repo);
+		} catch (err) {
+			new Notice(`Cannot list worktrees: ${err instanceof Error ? err.message : String(err)}`);
+			return;
+		}
+		if (this.state.snapshot.kind !== 'repo' || this.state.snapshot.repo !== repo) return;
+		this.changes.setWorktreeCount(worktrees.length);
+		const rect = (anchor ?? this.contentEl).getBoundingClientRect();
+		showWorktreeMenu(this.contentEl.doc, { x: rect.left, y: anchor ? rect.bottom : rect.top + 40 }, worktrees, (wt) => {
+			void this.switchWorktree(wt.path, repo.prefix);
+		});
+	}
+
+	/**
+	 * Opens the worktree at `target`, keeping the same subfolder and, when it
+	 * exists there, the same file open, so versions are easy to compare.
+	 */
+	async switchWorktree(target: string, prefix: string) {
+		const current = this.pane.currentPath();
+		const rel = current ? path.relative(this.folder, current) : '';
+		const folder = await equivalentFolder(target, prefix);
+		await this.openFolder(folder, true);
+		if (this.folder !== folder || !rel || rel.startsWith('..') || path.isAbsolute(rel)) return;
+		const absPath = path.join(folder, rel);
+		if (!(await isFile(absPath))) return;
+		this.files.select(absPath);
+		await this.pane.showFile(absPath, rel);
 	}
 
 	/** True when a file in a git repository is shown as code. */
@@ -344,6 +392,16 @@ export class SourceObserverView extends ItemView {
 			}
 		}
 		this.files.setDecorations(kinds, dirty);
+
+		if (repo && repo.commonDir !== this.worktreeKey) {
+			this.worktreeKey = repo.commonDir;
+			void repo.worktrees().then(
+				(list) => { if (this.worktreeKey === repo.commonDir) this.changes.setWorktreeCount(list.length); },
+				() => undefined,
+			);
+		} else if (!repo) {
+			this.worktreeKey = null;
+		}
 
 		const watchFolder = snapshot.kind === 'none' || snapshot.kind === 'missing-folder' ? '' : snapshot.folder;
 		const key = `${watchFolder}\0${repo?.gitDir ?? ''}`;
