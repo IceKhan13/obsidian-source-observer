@@ -316,6 +316,8 @@
 .so-branch-chevron svg { width: 12px; height: 12px; }
 
 /* Worktree menu items: branch, location, details */
+/* Separators only show in native menus, which use the title's plain text. */
+.so-wt-sep { display: none; }
 .so-wt-name { font-family: var(--font-monospace); }
 .so-wt-tag {
 	margin-left: 6px;
