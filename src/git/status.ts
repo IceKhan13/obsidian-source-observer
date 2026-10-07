@@ -6,8 +6,11 @@
 /** One-letter status code as git reports it ('.' means unchanged). */
 export type StatusCode = '.' | 'M' | 'T' | 'A' | 'D' | 'R' | 'C' | 'U' | '?';
 
-/** Which side of the comparison a change belongs to. */
-export type ChangeGroup = 'conflicts' | 'staged' | 'unstaged';
+/**
+ * Which side of the comparison a change belongs to; `base` compares a base
+ * branch's merge base with the working tree.
+ */
+export type ChangeGroup = 'conflicts' | 'staged' | 'unstaged' | 'base';
 
 /** Coarse classification used for badges, counts and tree colours. */
 export type ChangeKind = 'added' | 'modified' | 'deleted' | 'renamed' | 'untracked' | 'conflicted';
@@ -45,6 +48,8 @@ export interface ChangeEntry {
 	group: ChangeGroup;
 	kind: ChangeKind;
 	file: ChangedFile;
+	/** For the `base` group: the base branch and its merge base with HEAD. */
+	base?: { ref: string; commit: string };
 }
 
 function asCode(ch: string | undefined): StatusCode {
@@ -183,9 +188,13 @@ export interface ChangeCounts {
 
 /** Counts each file exactly once, by its primary kind. */
 export function countChanges(files: ChangedFile[]): ChangeCounts {
+	return countKinds(files.map(primaryKind));
+}
+
+/** Counts change kinds for the header badges; untracked files count as added. */
+export function countKinds(kinds: ChangeKind[]): ChangeCounts {
 	const counts: ChangeCounts = { added: 0, modified: 0, deleted: 0, conflicted: 0 };
-	for (const file of files) {
-		const kind = primaryKind(file);
+	for (const kind of kinds) {
 		if (kind === 'added' || kind === 'untracked') counts.added++;
 		else if (kind === 'deleted') counts.deleted++;
 		else if (kind === 'conflicted') counts.conflicted++;
