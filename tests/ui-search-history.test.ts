@@ -158,6 +158,9 @@ describe('ContentPane history and blame', () => {
 		await vi.waitFor(() => expect(el.querySelectorAll('.so-blame-start')).toHaveLength(2));
 		const authors = Array.from(el.querySelectorAll('.so-blame-author')).map((a) => a.textContent);
 		expect(authors).toEqual(['Test', 'Other']);
+		// Ages sit in a fixed-width column in compact form; the tooltip has the full date.
+		expect(Array.from(el.querySelectorAll('.so-blame-age')).map((x) => x.textContent)).toEqual(['now', 'now']);
+		expect(el.querySelector<HTMLElement>('.so-blame-start')?.title).toMatch(/^[0-9a-f]{7} · Test · just now, /);
 		expect(el.querySelector('.so-blame-toggle')?.getAttribute('aria-pressed')).toBe('true');
 
 		await pane.showFile(path.join(root, 'b.ts'), 'b.ts');
