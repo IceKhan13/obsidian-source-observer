@@ -11,6 +11,8 @@ export interface SourceObserverSettings {
 	/** Sidebar width in px. */
 	sidebarWidth: number;
 	diffLayout: DiffLayout;
+	/** Wrap long lines in the viewer instead of scrolling sideways. */
+	wordWrap: boolean;
 }
 
 export const DEFAULT_SETTINGS: SourceObserverSettings = {
@@ -20,6 +22,7 @@ export const DEFAULT_SETTINGS: SourceObserverSettings = {
 	recentFolders: [],
 	sidebarWidth: 240,
 	diffLayout: 'unified',
+	wordWrap: false,
 };
 
 export const FONT_SIZE_RANGE = { min: 10, max: 20 } as const;
@@ -52,6 +55,7 @@ export function sanitizeSettings(raw: unknown): SourceObserverSettings {
 		recentFolders: [...new Set(recentFolders)].slice(0, MAX_RECENT_FOLDERS),
 		sidebarWidth: clamp(num(data.sidebarWidth, DEFAULT_SETTINGS.sidebarWidth), SIDEBAR_WIDTH_RANGE.min, SIDEBAR_WIDTH_RANGE.max),
 		diffLayout: data.diffLayout === 'split' ? 'split' : 'unified',
+		wordWrap: data.wordWrap === true,
 	};
 }
 

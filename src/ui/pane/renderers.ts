@@ -31,6 +31,8 @@ export abstract class PaneRenderer extends Component {
 
 	setFontSize(_fontSize: number) { /* optional */ }
 
+	setWordWrap(_wordWrap: boolean) { /* optional */ }
+
 	/** The editor that find and go-to-line act on, if this renderer has one. */
 	editor(): EditorView | null { return null; }
 
@@ -76,6 +78,11 @@ function baseEditorExtensions(): Extension[] {
 	];
 }
 
+/** CodeMirror line wrapping, when enabled. */
+function wrapExtension(wordWrap: boolean): Extension {
+	return wordWrap ? EditorView.lineWrapping : [];
+}
+
 /** `lines` clamped to the document, or null when it starts past the end. */
 function clampLines(doc: Text, lines: LineRange): LineRange | null {
 	if (lines.from > doc.lines) return null;
@@ -111,8 +118,9 @@ export class CodeRenderer extends PaneRenderer {
 	private highlight = new Compartment();
 	private blame = new Compartment();
 	private blameShown = false;
+	private wrap = new Compartment();
 
-	constructor(parent: HTMLElement, private fontSize: number) {
+	constructor(parent: HTMLElement, private fontSize: number, private wordWrap = false) {
 		super(parent, 'so-code-view');
 	}
 
@@ -127,6 +135,7 @@ export class CodeRenderer extends PaneRenderer {
 					this.language.of([]),
 					this.font.of(fontTheme(this.fontSize)),
 					this.highlight.of([]),
+					this.wrap.of(wrapExtension(this.wordWrap)),
 				],
 			}),
 		});
@@ -207,6 +216,12 @@ export class CodeRenderer extends PaneRenderer {
 		this.fontSize = fontSize;
 		this.view?.dispatch({ effects: this.font.reconfigure(fontTheme(fontSize)) });
 	}
+
+	setWordWrap(wordWrap: boolean) {
+		if (this.wordWrap === wordWrap) return;
+		this.wordWrap = wordWrap;
+		this.view?.dispatch({ effects: this.wrap.reconfigure(wrapExtension(wordWrap)) });
+	}
 }
 
 /**
@@ -220,6 +235,7 @@ export class DiffRenderer extends PaneRenderer {
 	/** Side of the split layout that last had focus. */
 	private focusedSide: 'a' | 'b' = 'b';
 	private font = new Compartment();
+	private wrap = new Compartment();
 
 	constructor(
 		parent: HTMLElement,
@@ -228,6 +244,7 @@ export class DiffRenderer extends PaneRenderer {
 		private modified: string,
 		private fileName: string,
 		readonly layout: DiffLayout,
+		private wordWrap = false,
 	) {
 		super(parent, `so-diff-view so-diff-${layout}`);
 	}
@@ -237,6 +254,7 @@ export class DiffRenderer extends PaneRenderer {
 			...baseEditorExtensions(),
 			languageFor(this.fileName),
 			this.font.of(fontTheme(this.fontSize)),
+			this.wrap.of(wrapExtension(this.wordWrap)),
 			diffTheme,
 		];
 		const collapseUnchanged = { margin: 3, minSize: 6 };
@@ -296,6 +314,13 @@ export class DiffRenderer extends PaneRenderer {
 		if (this.fontSize === fontSize) return;
 		this.fontSize = fontSize;
 		const effects = this.font.reconfigure(fontTheme(fontSize));
+		for (const view of this.views()) view.dispatch({ effects });
+	}
+
+	setWordWrap(wordWrap: boolean) {
+		if (this.wordWrap === wordWrap) return;
+		this.wordWrap = wordWrap;
+		const effects = this.wrap.reconfigure(wrapExtension(wordWrap));
 		for (const view of this.views()) view.dispatch({ effects });
 	}
 

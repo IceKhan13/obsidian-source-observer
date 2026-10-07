@@ -29,6 +29,8 @@ interface PaneAction {
 
 export interface ContentPaneOptions {
 	fontSize: number;
+	/** Wrap long lines instead of scrolling sideways. */
+	wordWrap?: boolean;
 	diffLayout?: DiffLayout;
 	/** Called when the user switches the diff layout from the header. */
 	onDiffLayoutChange?: (layout: DiffLayout) => void;
@@ -96,11 +98,13 @@ export class ContentPane extends Component {
 	private blameRequest = new LatestRequest();
 
 	private fontSize: number;
+	private wordWrap: boolean;
 	private diffLayout: DiffLayout;
 
 	constructor(parent: HTMLElement, private opts: ContentPaneOptions) {
 		super();
 		this.fontSize = opts.fontSize;
+		this.wordWrap = opts.wordWrap ?? false;
 		this.diffLayout = opts.diffLayout ?? 'unified';
 		this.headerEl = parent.createDiv({ cls: 'so-pane-header' });
 		this.labelEl = this.headerEl.createDiv({ cls: 'so-path-label' });
@@ -186,6 +190,11 @@ export class ContentPane extends Component {
 	setFontSize(fontSize: number) {
 		this.fontSize = fontSize;
 		this.current?.setFontSize(fontSize);
+	}
+
+	setWordWrap(wordWrap: boolean) {
+		this.wordWrap = wordWrap;
+		this.current?.setWordWrap(wordWrap);
 	}
 
 	/** Switches between unified and side-by-side diffs, re-rendering an open diff. */
@@ -298,7 +307,7 @@ export class ContentPane extends Component {
 			if (this.current instanceof CodeRenderer) {
 				this.current.setDocument(plan.text, plan.fileName, keepScroll, lines);
 			} else {
-				const code = new CodeRenderer(this.bodyEl, this.fontSize);
+				const code = new CodeRenderer(this.bodyEl, this.fontSize, this.wordWrap);
 				this.mount(code);
 				code.setDocument(plan.text, plan.fileName, false, lines);
 			}
@@ -311,7 +320,7 @@ export class ContentPane extends Component {
 
 		if (plan.kind === 'diff') {
 			const layout = this.diffLayout;
-			const diff = new DiffRenderer(this.bodyEl, this.fontSize, plan.original, plan.modified, plan.fileName, layout);
+			const diff = new DiffRenderer(this.bodyEl, this.fontSize, plan.original, plan.modified, plan.fileName, layout, this.wordWrap);
 			this.mount(diff);
 			const next: DiffLayout = layout === 'split' ? 'unified' : 'split';
 			const actions: PaneAction[] = [

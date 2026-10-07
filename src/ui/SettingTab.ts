@@ -28,6 +28,16 @@ export class SourceObserverSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
+			.setName('Word wrap')
+			.setDesc('Wrap long lines in files and diffs instead of scrolling sideways.')
+			.addToggle((toggle) =>
+				toggle.setValue(settings.wordWrap).onChange(async (value) => {
+					settings.wordWrap = value;
+					await this.plugin.saveSettings();
+				}),
+			);
+
+		new Setting(containerEl)
 			.setName('Diff layout')
 			.setDesc('Show changes in one column, or the old and new versions side by side.')
 			.addDropdown((dropdown) =>
