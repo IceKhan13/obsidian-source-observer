@@ -1,15 +1,18 @@
 import { debounce, ItemView, Menu, Notice, Scope, setIcon, WorkspaceLeaf } from 'obsidian';
 import * as path from 'path';
 import type SourceObserverPlugin from '../main';
-import { addRecentFolder, clamp, DEFAULT_SETTINGS, SIDEBAR_WIDTH_RANGE } from '../settings';
+import { addRecentFolder, clamp, DEFAULT_SETTINGS, setBaseBranch, SIDEBAR_WIDTH_RANGE } from '../settings';
 import { ChangeEntry, ChangeKind, primaryKind } from '../git/status';
 import { COPY_FORMATS, CopyFormat, describeLocation, formatForCopy, LineRange, SourceLocation } from '../links/sourceLink';
+import { compareWithBase } from '../services/BaseComparison';
 import { RepoSnapshot, RepoState } from '../services/RepoState';
 import { RepoWatcher } from '../services/RepoWatcher';
 import { equivalentFolder, loadWorktreeSummaries } from '../services/Worktrees';
+import { LatestRequest } from '../utils/latest';
 import { isDirectory, isFile, normalizeFolderInput } from '../utils/paths';
 import { copyToClipboard } from '../utils/system';
 import { FileMenuItem, showFileMenu } from './fileMenu';
+import { showBaseMenu } from './baseMenu';
 import { promptForFolder, showFolderMenu } from './folderPicker';
 import { showWorktreeMenu } from './worktreeMenu';
 import { ContentPane } from './pane/ContentPane';
@@ -50,6 +53,9 @@ export class SourceObserverView extends ItemView {
 	private watchKey: string | null = null;
 	/** Common git dir whose worktree count is shown, so it is read once per repository. */
 	private worktreeKey: string | null = null;
+	private baseRequest = new LatestRequest();
+	/** Repository and base branch of the comparison on screen, to avoid flashing "Comparing…". */
+	private baseKey: string | null = null;
 
 	constructor(leaf: WorkspaceLeaf, private plugin: SourceObserverPlugin) {
 		super(leaf);
@@ -120,6 +126,8 @@ export class SourceObserverView extends ItemView {
 			onRefresh: () => this.refreshAll(),
 			onContextMenu: (evt, entry) => this.showChangeMenu(evt, entry),
 			onBranchClick: (anchor) => { void this.showWorktrees(anchor); },
+			onToggleBase: () => this.toggleBaseComparison(),
+			onBaseClick: (anchor) => { void this.chooseBase(anchor); },
 		}));
 		this.history = this.addChild(new HistorySection(sidebar, {
 			onOpenCommit: (repo, commit, absPath, label) => { void this.pane.showCommit(repo, commit, absPath, label); },
@@ -265,6 +273,59 @@ export class SourceObserverView extends ItemView {
 		await this.pane.showFile(absPath, rel);
 	}
 
+	/** Switches Changes between uncommitted changes and changes against the base branch. */
+	toggleBaseComparison() {
+		this.plugin.settings.compareWithBase = !this.plugin.settings.compareWithBase;
+		void this.plugin.saveSettings();
+		void this.refreshBase();
+	}
+
+	/** Lets the user pick the base branch for this repository. */
+	private async chooseBase(anchor: HTMLElement) {
+		if (this.state.snapshot.kind !== 'repo') return;
+		const repo = this.state.snapshot.repo;
+		let branches: string[];
+		try {
+			branches = await repo.branches();
+		} catch (err) {
+			new Notice(`Cannot list branches: ${err instanceof Error ? err.message : String(err)}`);
+			return;
+		}
+		const current = this.plugin.settings.baseBranches[repo.commonDir] ?? (await repo.defaultBase());
+		const rect = anchor.getBoundingClientRect();
+		showBaseMenu(this.contentEl.doc, { x: rect.left, y: rect.bottom }, branches, current, (branch) => {
+			const settings = this.plugin.settings;
+			settings.baseBranches = setBaseBranch(settings.baseBranches, repo.commonDir, branch);
+			void this.plugin.saveSettings();
+			void this.refreshBase();
+		});
+	}
+
+	/** Recomputes the base comparison for the current snapshot, when base mode is on. */
+	private async refreshBase() {
+		const snapshot = this.state.snapshot;
+		if (!this.plugin.settings.compareWithBase || snapshot.kind !== 'repo') {
+			this.baseRequest.cancel();
+			this.baseKey = null;
+			this.changes.setBase(null);
+			return;
+		}
+		const token = this.baseRequest.next();
+		const repo = snapshot.repo;
+		const ref = this.plugin.settings.baseBranches[repo.commonDir] ?? (await repo.defaultBase());
+		if (!this.baseRequest.isCurrent(token)) return;
+		const key = `${repo.gitDir}\0${repo.folder}\0${ref ?? ''}`;
+		if (key !== this.baseKey) this.changes.setBase({ kind: 'loading', ref });
+		const result = await compareWithBase(repo, ref, snapshot.status).catch((err: unknown) => ({
+			kind: 'error' as const,
+			ref,
+			message: err instanceof Error ? err.message : String(err),
+		}));
+		if (!this.baseRequest.isCurrent(token)) return;
+		this.baseKey = key;
+		this.changes.setBase(result);
+	}
+
 	/** True when a file in a git repository is shown as code. */
 	canToggleBlame(): boolean {
 		return this.pane.canBlame();
@@ -372,6 +433,7 @@ export class SourceObserverView extends ItemView {
 
 	private applySnapshot(snapshot: RepoSnapshot) {
 		this.changes.update(snapshot);
+		void this.refreshBase();
 
 		const repo = snapshot.kind === 'repo' ? snapshot.repo : null;
 		this.files.setRepo(repo);

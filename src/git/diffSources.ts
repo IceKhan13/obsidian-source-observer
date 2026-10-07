@@ -13,6 +13,7 @@ export interface DiffSides {
  * - staged:    HEAD (original path for renames) → index
  * - unstaged:  index → working tree (empty → working tree when untracked)
  * - conflicts: HEAD → working tree, which shows the conflict markers
+ * - base:      merge base with the base branch → working tree
  * A side that does not exist (added or deleted file) loads as `missing`
  * and is treated as an empty document by the renderer.
  */
@@ -26,6 +27,12 @@ export async function loadDiffSides(repo: GitRepo, entry: ChangeEntry): Promise<
 			repo.readBlob(`:${file.path}`),
 		]);
 		return { original, modified };
+	}
+	if (group === 'base' && entry.base) {
+		const original = file.untracked
+			? { kind: 'missing' as const }
+			: await repo.readBlob(`${entry.base.commit}:${file.origPath ?? file.path}`);
+		return { original, modified: await worktree() };
 	}
 	if (group === 'conflicts') {
 		const [original, modified] = await Promise.all([repo.readBlob(`HEAD:${file.path}`), worktree()]);

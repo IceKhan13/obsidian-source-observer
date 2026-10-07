@@ -8,6 +8,7 @@ An Obsidian plugin for browsing local code: open any folder, read files with syn
 
 - File tree with git status, syntax highlighting, find in file and go to line
 - Changes grouped into conflicts, staged and unstaged, with unified or side-by-side diffs
+- Changes against a base branch: everything a branch or worktree changed since it branched off, committed or not (toggle in the **Changes** header)
 - Search in files (`git grep` in repositories)
 - File history and blame
 - Worktree switcher: select the branch name in **Changes**
@@ -37,7 +38,7 @@ Requires desktop Obsidian 1.7.2+. Git features need `git` on your `PATH`.
 
 ## Privacy
 
-Source Observer makes no network requests. It only runs read-only git commands (`status`, `ls-files`, `cat-file`, `grep`, `log`, `blame`, `worktree list`) with `--no-optional-locks`, so it never writes to your repository.
+Source Observer makes no network requests. It only runs read-only git commands (`status`, `ls-files`, `cat-file`, `grep`, `log`, `blame`, `diff`, `merge-base`, `rev-parse`, `rev-list`, `for-each-ref`, `symbolic-ref`, `worktree list`) with `--no-optional-locks`, so it never writes to your repository.
 
 ## Development
 

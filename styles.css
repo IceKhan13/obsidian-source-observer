@@ -315,6 +315,12 @@
 .so-branch-chevron { display: flex; flex-shrink: 0; margin-left: auto; color: var(--text-faint); }
 .so-branch-chevron svg { width: 12px; height: 12px; }
 
+/* Changes against a base branch */
+.so-icon-btn.so-base-toggle.is-active { color: var(--text-accent); }
+.so-base-label { flex-shrink: 0; color: var(--text-faint); }
+.so-base-ahead { flex-shrink: 0; font-family: var(--font-monospace); color: var(--text-accent); }
+.so-base-error { color: var(--text-error); }
+
 /* Worktree menu items: branch, location, details */
 /* Separators only show in native menus, which use the title's plain text. */
 .so-wt-sep { display: none; }

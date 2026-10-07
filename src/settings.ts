@@ -13,6 +13,10 @@ export interface SourceObserverSettings {
 	diffLayout: DiffLayout;
 	/** Wrap long lines in the viewer instead of scrolling sideways. */
 	wordWrap: boolean;
+	/** Show changes against a base branch instead of uncommitted changes. */
+	compareWithBase: boolean;
+	/** Base branch chosen per repository, keyed by its common git dir. */
+	baseBranches: Record<string, string>;
 }
 
 export const DEFAULT_SETTINGS: SourceObserverSettings = {
@@ -23,11 +27,15 @@ export const DEFAULT_SETTINGS: SourceObserverSettings = {
 	sidebarWidth: 240,
 	diffLayout: 'unified',
 	wordWrap: false,
+	compareWithBase: false,
+	baseBranches: {},
 };
 
 export const FONT_SIZE_RANGE = { min: 10, max: 20 } as const;
 export const SIDEBAR_WIDTH_RANGE = { min: 160, max: 600 } as const;
 export const MAX_RECENT_FOLDERS = 8;
+/** Repositories whose base branch choice is remembered. */
+export const MAX_BASE_BRANCHES = 50;
 
 export function clamp(value: number, min: number, max: number): number {
 	return Math.min(max, Math.max(min, value));
@@ -56,7 +64,22 @@ export function sanitizeSettings(raw: unknown): SourceObserverSettings {
 		sidebarWidth: clamp(num(data.sidebarWidth, DEFAULT_SETTINGS.sidebarWidth), SIDEBAR_WIDTH_RANGE.min, SIDEBAR_WIDTH_RANGE.max),
 		diffLayout: data.diffLayout === 'split' ? 'split' : 'unified',
 		wordWrap: data.wordWrap === true,
+		compareWithBase: data.compareWithBase === true,
+		baseBranches: sanitizeBaseBranches(data.baseBranches),
 	};
+}
+
+function sanitizeBaseBranches(raw: unknown): Record<string, string> {
+	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+	const entries = Object.entries(raw as Record<string, unknown>)
+		.filter((e): e is [string, string] => typeof e[1] === 'string' && e[0].length > 0 && e[1].length > 0);
+	return Object.fromEntries(entries.slice(-MAX_BASE_BRANCHES));
+}
+
+/** Records `branch` as the base for the repository `key`, keeping the map bounded. */
+export function setBaseBranch(map: Record<string, string>, key: string, branch: string): Record<string, string> {
+	const entries: [string, string][] = [...Object.entries(map).filter(([k]) => k !== key), [key, branch]];
+	return Object.fromEntries(entries.slice(-MAX_BASE_BRANCHES));
 }
 
 /** Moves `folder` to the front of the recent list, dropping duplicates and overflow. */

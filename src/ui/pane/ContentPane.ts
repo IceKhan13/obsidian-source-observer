@@ -48,6 +48,7 @@ const GROUP_LABEL: Record<ChangeGroup, string> = {
 	staged: 'staged',
 	unstaged: 'working tree',
 	conflicts: 'conflict',
+	base: 'against base',
 };
 
 /** What to render once a target's data has loaded. */
@@ -279,7 +280,7 @@ export class ContentPane extends Component {
 
 	private render(target: PaneTarget, plan: Plan, keepScroll: boolean) {
 		const suffix = target.type === 'diff'
-			? ` (${GROUP_LABEL[target.entry.group]})`
+			? ` (${target.entry.base ? `against ${target.entry.base.ref}` : GROUP_LABEL[target.entry.group]})`
 			: target.type === 'commit' ? ` @ ${target.commit.short} · ${target.commit.subject}` : '';
 		const label = target.label + suffix;
 

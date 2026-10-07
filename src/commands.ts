@@ -69,6 +69,12 @@ export function registerCommands(plugin: SourceObserverPlugin) {
 	});
 
 	plugin.addCommand({
+		id: 'toggle-compare-with-base',
+		name: 'Toggle changes against base branch',
+		checkCallback: (checking) => onActiveView(checking, (v) => v.hasRepo(), (v) => v.toggleBaseComparison()),
+	});
+
+	plugin.addCommand({
 		id: 'switch-worktree',
 		name: 'Switch worktree…',
 		checkCallback: (checking) => onActiveView(checking, (v) => v.hasRepo(), (v) => { void v.showWorktrees(); }),

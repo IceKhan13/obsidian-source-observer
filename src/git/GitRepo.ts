@@ -2,6 +2,7 @@ import { execFile, spawn } from 'child_process';
 import { promises as fsp } from 'fs';
 import * as path from 'path';
 import { decodeContent, LoadedContent, MAX_VIEW_BYTES } from '../utils/content';
+import { BaseChange, parseNameStatus } from './baseDiff';
 import { BlameCommit, parseBlame } from './blame';
 import { GrepHit, grepArgs, GrepOptions, parseGrepLine } from './grep';
 import { FileCommit, LOG_FORMAT, parseLog } from './history';
@@ -252,6 +253,62 @@ export class GitRepo {
 			return [];
 		}
 		return parseLog(out, repoPath);
+	}
+
+	/**
+	 * The branch to compare against by default: the remote's default branch
+	 * (`origin/HEAD`), else a local `main` or `master`. Null when none exists.
+	 */
+	async defaultBase(): Promise<string | null> {
+		try {
+			const ref = (await execText(this.root, ['symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD'])).trim();
+			if (ref) return ref;
+		} catch {
+			// No remote default branch; try common local names.
+		}
+		for (const name of ['main', 'master']) {
+			if (await this.hasCommit(`refs/heads/${name}`)) return name;
+		}
+		return null;
+	}
+
+	/** True when `ref` names a commit. */
+	async hasCommit(ref: string): Promise<boolean> {
+		try {
+			await execText(this.root, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]);
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
+	/** Local and remote-tracking branch names, e.g. `main`, `origin/main`. */
+	async branches(): Promise<string[]> {
+		const out = await execText(this.root, ['for-each-ref', '--format=%(refname)', 'refs/heads', 'refs/remotes']);
+		return out.split('\n')
+			.filter((ref) => ref && !ref.endsWith('/HEAD'))
+			.map((ref) => ref.replace(/^refs\/(heads|remotes)\//, ''));
+	}
+
+	/** The best common ancestor of HEAD and `ref`; throws when they share no history. */
+	async mergeBase(ref: string): Promise<string> {
+		return (await execText(this.root, ['merge-base', 'HEAD', ref])).trim();
+	}
+
+	/** Number of commits on HEAD since `commit`. */
+	async commitsSince(commit: string): Promise<number> {
+		return Number((await execText(this.root, ['rev-list', '--count', `${commit}..HEAD`])).trim()) || 0;
+	}
+
+	/**
+	 * Tracked files in the opened folder that differ between `commit` and the
+	 * working tree: committed, staged and unstaged changes together.
+	 */
+	async diffAgainst(commit: string): Promise<BaseChange[]> {
+		const out = await execText(this.root, [
+			'diff', '--name-status', '-z', '-M', '--no-color', '--no-ext-diff', '--no-relative', commit, ...this.scope(),
+		]);
+		return parseNameStatus(out);
 	}
 
 	/** All worktrees of the repository, the main worktree first. */
