@@ -511,7 +511,7 @@
 .so-blame-entry {
 	display: flex;
 	gap: 6px;
-	width: 24ch;
+	width: 27ch;
 	padding: 0 8px 0 6px;
 	font-size: 0.85em;
 	color: var(--text-muted);
@@ -520,7 +520,7 @@
 .so-blame-start { border-top: 1px solid var(--background-modifier-border); }
 .cm-gutterElement:first-child .so-blame-start { border-top: none; }
 .so-blame-author { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.so-blame-age { flex-shrink: 0; color: var(--text-faint); }
+.so-blame-age { flex-shrink: 0; width: 4ch; text-align: right; color: var(--text-faint); font-variant-numeric: tabular-nums; }
 .so-blame-uncommitted { color: var(--text-faint); font-style: italic; }
 .so-pane-action.so-blame-toggle.is-active { color: var(--text-accent); }
 

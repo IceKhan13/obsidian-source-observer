@@ -6,6 +6,7 @@ import { formatBytes, looksBinary, readViewableFile } from '../src/utils/content
 import { fileIcon } from '../src/utils/fileIcons';
 import { LatestRequest } from '../src/utils/latest';
 import { normalizeFolderInput } from '../src/utils/paths';
+import { formatShortAge } from '../src/utils/time';
 import { remove, tempDir, write } from './helpers';
 
 const cleanup: string[] = [];
@@ -98,3 +99,18 @@ describe('small utilities', () => {
 		expect(latest.isCurrent(b)).toBe(false);
 	});
 });
+
+describe('formatShortAge', () => {
+	it('uses the largest whole unit, compactly', () => {
+		const now = 1_000_000_000;
+		const ago = (s: number) => formatShortAge(now - s, now);
+		expect(ago(10)).toBe('now');
+		expect(ago(5 * 60)).toBe('5m');
+		expect(ago(3 * 3600 + 59)).toBe('3h');
+		expect(ago(2 * 86400)).toBe('2d');
+		expect(ago(15 * 86400)).toBe('2w');
+		expect(ago(70 * 86400)).toBe('2mo');
+		expect(ago(800 * 86400)).toBe('2y');
+	});
+});
+

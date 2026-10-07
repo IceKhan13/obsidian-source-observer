@@ -1,7 +1,7 @@
 import type { Extension } from '@codemirror/state';
 import { EditorView, gutter, GutterMarker } from '@codemirror/view';
 import type { BlameCommit } from '../../git/blame';
-import { formatDateTime, formatRelativeTime } from '../../utils/time';
+import { formatDateTime, formatRelativeTime, formatShortAge } from '../../utils/time';
 
 /**
  * Shows the author and age on the first line of each run of lines from the
@@ -30,8 +30,9 @@ class BlameMarker extends GutterMarker {
 			return el;
 		}
 		el.createSpan({ cls: 'so-blame-author', text: commit.author });
-		el.createSpan({ cls: 'so-blame-age', text: formatRelativeTime(commit.time, this.now) });
-		el.title = `${commit.hash.slice(0, 7)} · ${commit.author} · ${formatDateTime(commit.time)}\n${commit.summary}`;
+		// A fixed-width age column gives every author name the same room.
+		el.createSpan({ cls: 'so-blame-age', text: formatShortAge(commit.time, this.now) });
+		el.title = `${commit.hash.slice(0, 7)} · ${commit.author} · ${formatRelativeTime(commit.time, this.now)}, ${formatDateTime(commit.time)}\n${commit.summary}`;
 		return el;
 	}
 }
