@@ -133,6 +133,7 @@ export class SourceObserverView extends ItemView {
 		const main = root.createDiv({ cls: 'so-main' });
 		this.pane = this.addChild(new ContentPane(main, {
 			fontSize: settings.fontSize,
+			wordWrap: settings.wordWrap,
 			diffLayout: settings.diffLayout,
 			onDiffLayoutChange: (layout) => {
 				this.plugin.settings.diffLayout = layout;
@@ -171,6 +172,7 @@ export class SourceObserverView extends ItemView {
 		const settingsRef = this.plugin.settingsEvents.on('changed', () => {
 			const s = this.plugin.settings;
 			this.pane.setFontSize(s.fontSize);
+			this.pane.setWordWrap(s.wordWrap);
 			this.pane.setDiffLayout(s.diffLayout);
 			this.files.setShowHidden(s.showHidden);
 			this.search.setShowHidden(s.showHidden);
