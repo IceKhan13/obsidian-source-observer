@@ -173,3 +173,26 @@ describe('ChangesSection branch line', () => {
 		expect(el.querySelector('.so-branch-chevron')).toBeNull();
 	});
 });
+
+describe('linked worktrees inside the repository', () => {
+	it('are left out of changes and the file list, unlike unrelated nested repositories', async () => {
+		const root = makeRepo({ 'a.txt': 'a\n' });
+		const other = makeRepo({ 'x.txt': 'x\n' });
+		cleanup.push(root, other);
+		git(root, 'worktree', 'add', '-q', '-b', 'agent', '.claude/worktrees/agent');
+		git(root, 'init', '-q', 'vendor/lib');
+		// A worktree of a different repository that happens to live in this one.
+		git(other, 'worktree', 'add', '-q', '-b', 'stray', path.join(root, 'stray'));
+		write(root, 'new.txt', 'n\n');
+
+		const repo = await open(root);
+		const untracked = (await repo.status()).files.map((f) => f.path).sort();
+		expect(untracked).toEqual(['new.txt', 'stray/', 'vendor/lib/']);
+		const files = (await repo.listFiles()).sort();
+		expect(files).toEqual(['a.txt', 'new.txt', 'stray/', 'vendor/lib/']);
+
+		const summaries = await loadWorktreeSummaries(repo);
+		expect(summaries[0]?.changed).toBe(3);
+	});
+});
+

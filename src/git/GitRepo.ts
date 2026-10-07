@@ -1,4 +1,5 @@
 import { execFile, spawn } from 'child_process';
+import { promises as fsp } from 'fs';
 import * as path from 'path';
 import { decodeContent, LoadedContent, MAX_VIEW_BYTES } from '../utils/content';
 import { BlameCommit, parseBlame } from './blame';
@@ -172,12 +173,18 @@ export class GitRepo {
 		return this.prefix ? ['--', this.prefix] : [];
 	}
 
-	/** Runs `git status` for the opened folder. */
+	/**
+	 * Runs `git status` for the opened folder. Linked worktrees of this
+	 * repository that live inside it are left out (see `nestedWorktrees`).
+	 */
 	async status(): Promise<RepoStatus> {
 		const out = await execText(this.root, [
 			'status', '--porcelain=v2', '-z', '--branch', '--untracked-files=all', ...this.scope(),
 		]);
-		return parseStatusV2(out);
+		const status = parseStatusV2(out);
+		const nested = await this.nestedWorktrees(status.files.filter((f) => f.untracked).map((f) => f.path));
+		if (nested.size > 0) status.files = status.files.filter((f) => !(f.untracked && nested.has(f.path)));
+		return status;
 	}
 
 	/** Lists tracked and untracked (non-ignored) files, relative to the opened folder. */
@@ -185,11 +192,41 @@ export class GitRepo {
 		const out = await execText(this.root, [
 			'ls-files', '-z', '--cached', '--others', '--exclude-standard', ...this.scope(),
 		]);
+		const paths = out.split('\0').filter(Boolean);
+		const nested = await this.nestedWorktrees(paths);
 		const seen = new Set<string>();
-		for (const p of out.split('\0')) {
-			if (p) seen.add(this.toFolderRelative(p));
+		for (const p of paths) {
+			if (!nested.has(p)) seen.add(this.toFolderRelative(p));
 		}
 		return [...seen];
+	}
+
+	/**
+	 * Of the untracked `paths` git reported, the folders that are linked
+	 * worktrees of this repository, e.g. `.claude/worktrees/agent/`. Git
+	 * lists such folders as untracked directories unless they are ignored.
+	 * Each has a `.git` file pointing into this repository's `worktrees`
+	 * folder, which tells them apart from unrelated nested repositories.
+	 */
+	private async nestedWorktrees(paths: string[]): Promise<Set<string>> {
+		const nested = new Set<string>();
+		const dirs = paths.filter((p) => p.endsWith('/'));
+		if (dirs.length === 0) return nested;
+		const realOrSelf = (p: string) => fsp.realpath(p).catch(() => path.resolve(p));
+		const worktreesDir = (await realOrSelf(path.join(this.commonDir, 'worktrees'))) + path.sep;
+		await Promise.all(dirs.map(async (dir) => {
+			let text: string;
+			try {
+				text = await fsp.readFile(path.join(this.root, dir, '.git'), 'utf-8');
+			} catch {
+				return; // no .git file: a plain folder or a separate repository
+			}
+			const gitdir = /^gitdir:\s*(.+)$/m.exec(text)?.[1]?.trim();
+			if (!gitdir) return;
+			const target = await realOrSelf(path.resolve(this.root, dir, gitdir));
+			if (target.startsWith(worktreesDir)) nested.add(dir);
+		}));
+		return nested;
 	}
 
 	/**
