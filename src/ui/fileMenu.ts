@@ -46,9 +46,14 @@ export function fileMenuGroups(target: FileMenuTarget, extra: FileMenuItem[][] =
 
 /** Shows the context menu for `target` at the mouse position. */
 export function showFileMenu(evt: MouseEvent, target: FileMenuTarget, extra: FileMenuItem[][] = []) {
+	showMenuGroups(evt, fileMenuGroups(target, extra));
+}
+
+/** Shows groups of items, separated, at the mouse position; empty groups are skipped. */
+export function showMenuGroups(evt: MouseEvent, groups: FileMenuItem[][]) {
 	evt.preventDefault();
 	const menu = new Menu();
-	fileMenuGroups(target, extra).forEach((group, i) => {
+	groups.filter((group) => group.length > 0).forEach((group, i) => {
 		if (i > 0) menu.addSeparator();
 		for (const item of group) {
 			menu.addItem((mi) => mi.setTitle(item.title).setIcon(item.icon).onClick(item.run));

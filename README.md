@@ -13,6 +13,7 @@ An Obsidian plugin for browsing local code: open any folder, read files with syn
 - File history and blame
 - Worktree switcher: select the branch name in **Changes**
 - Links and live embeds of code in notes
+- Copy code, references and diffs to paste into Claude Code or other coding agents
 
 ## Usage
 
@@ -29,6 +30,14 @@ lines: 40-75
 ````
 
 `file` can be relative to `folder` or absolute. `lines` is optional. Links and embeds use absolute paths, so they only work on the computer that made them.
+
+To give code to a coding agent such as Claude Code, use the same menu:
+
+- **Copy reference** copies `src/server.ts:40-75`. The agent then reads the file itself.
+- **Copy for agent** copies the reference followed by the code.
+- **Copy diff**, in a diff, copies the change as a unified diff. To copy a single change, select the copy icon next to it.
+
+Paths are relative to the repository root, so they match an agent started there. In history, references name the commit, e.g. `src/server.ts:40-75 @ a1b2c3d`. Right-click search results to copy references to their lines, and use the copy icon in the **Changes** header to copy all changes as one diff or a list of changed files.
 
 ## Installation
 
