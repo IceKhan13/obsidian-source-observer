@@ -23,7 +23,8 @@ export interface SearchSectionOptions {
 	showHidden: boolean;
 	/** Opens `absPath` at `line`; `rel` is relative to the opened folder. */
 	onOpenMatch: (absPath: string, rel: string, line: number) => void;
-	onContextMenu?: (evt: MouseEvent, absPath: string, relPath: string) => void;
+	/** Right-click on a file or a result; `lines` are the file's matching lines. */
+	onContextMenu?: (evt: MouseEvent, absPath: string, relPath: string, lines: number[]) => void;
 }
 
 /**
@@ -43,6 +44,8 @@ export class SearchSection extends Component {
 	private repoKnown = false;
 	private showHidden: boolean;
 	private abort: AbortController | null = null;
+	/** Results on screen, so they can be copied. */
+	private results: SearchResults | null = null;
 	/** Query of the results on screen, so unchanged searches are not re-run. */
 	private shownKey = '';
 	private runDebounced: ReturnType<typeof debounce>;
@@ -157,6 +160,11 @@ export class SearchSection extends Component {
 		this.run(true);
 	}
 
+	/** Every result on screen: a path relative to the opened folder and a line number. */
+	resultLines(): { rel: string; line: number }[] {
+		return this.results?.files.flatMap((f) => f.lines.map((m) => ({ rel: f.rel, line: m.line }))) ?? [];
+	}
+
 	private query(): SearchQuery {
 		return { text: this.input.value, ...this.options };
 	}
@@ -172,6 +180,7 @@ export class SearchSection extends Component {
 
 		if (!query.text || !this.folder || !this.repoKnown) {
 			this.showSummary('');
+			this.results = null;
 			this.resultsEl.empty();
 			return;
 		}
@@ -184,6 +193,7 @@ export class SearchSection extends Component {
 				this.render(results);
 			}, (err: unknown) => {
 				if (abort.signal.aborted) return;
+				this.results = null;
 				this.resultsEl.empty();
 				const message = err instanceof Error ? err.message : String(err);
 				this.showSummary(err instanceof SyntaxError ? `Invalid regular expression: ${message}` : message, true);
@@ -203,6 +213,7 @@ export class SearchSection extends Component {
 	}
 
 	private render(results: SearchResults) {
+		this.results = results;
 		const scrollTop = this.resultsEl.scrollTop;
 		this.resultsEl.empty();
 		const { files, matchCount, truncated } = results;
@@ -237,13 +248,14 @@ export class SearchSection extends Component {
 		if (dir) label.createSpan({ cls: 'so-row-context', text: ` ${dir}` });
 		header.createSpan({ cls: 'so-search-count', text: String(file.lines.length) });
 		header.addEventListener('click', () => { group.toggleClass('is-collapsed', !group.hasClass('is-collapsed')); });
-		header.addEventListener('contextmenu', (evt) => this.opts.onContextMenu?.(evt, absPath, file.rel));
+		const lines = file.lines.map((m) => m.line);
+		header.addEventListener('contextmenu', (evt) => this.opts.onContextMenu?.(evt, absPath, file.rel, lines));
 
 		const list = group.createDiv({ cls: 'so-search-lines' });
-		for (const match of file.lines) this.renderLine(list, absPath, file.rel, match);
+		for (const match of file.lines) this.renderLine(list, absPath, file.rel, match, lines);
 	}
 
-	private renderLine(list: HTMLElement, absPath: string, rel: string, match: MatchLine) {
+	private renderLine(list: HTMLElement, absPath: string, rel: string, match: MatchLine, fileLines: number[]) {
 		const row = list.createDiv({ cls: 'so-tree-row so-search-line' });
 		markRow(row);
 		row.title = `${rel}:${match.line}`;
@@ -262,7 +274,7 @@ export class SearchSection extends Component {
 			row.addClass('is-active');
 			this.opts.onOpenMatch(absPath, rel, match.line);
 		});
-		row.addEventListener('contextmenu', (evt) => this.opts.onContextMenu?.(evt, absPath, rel));
+		row.addEventListener('contextmenu', (evt) => this.opts.onContextMenu?.(evt, absPath, rel, fileLines));
 	}
 
 	/** Left/Right on a result: collapse or expand its file, focusing the file row. */

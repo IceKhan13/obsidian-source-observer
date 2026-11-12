@@ -1,4 +1,5 @@
 import type SourceObserverPlugin from './main';
+import { AGENT_FORMATS, AgentFormat } from './links/agentFormat';
 import { COPY_FORMATS, CopyFormat } from './links/sourceLink';
 import { SourceObserverView } from './ui/SourceObserverView';
 
@@ -6,6 +7,11 @@ const COPY_COMMANDS: Record<CopyFormat, { id: string; name: string }> = {
 	link: { id: 'copy-link', name: 'Copy link to file or selection' },
 	embed: { id: 'copy-embed', name: 'Copy embed of file or selection' },
 	code: { id: 'copy-code-block', name: 'Copy file or selection as code block' },
+};
+
+const AGENT_COMMANDS: Record<AgentFormat, { id: string; name: string }> = {
+	reference: { id: 'copy-reference', name: 'Copy reference to file or selection' },
+	snippet: { id: 'copy-for-agent', name: 'Copy file or selection for agent' },
 };
 
 /** Registers the command palette commands. IDs are stable; do not rename them. */
@@ -86,4 +92,23 @@ export function registerCommands(plugin: SourceObserverPlugin) {
 			checkCallback: (checking) => onActiveView(checking, (v) => v.canCopyLink(), (v) => v.copyFromEditor(format)),
 		});
 	}
+
+	for (const { format } of AGENT_FORMATS) {
+		plugin.addCommand({
+			...AGENT_COMMANDS[format],
+			checkCallback: (checking) => onActiveView(checking, (v) => v.canCopyForAgent(), (v) => v.copyForAgent(format)),
+		});
+	}
+
+	plugin.addCommand({
+		id: 'copy-diff',
+		name: 'Copy diff of open change',
+		checkCallback: (checking) => onActiveView(checking, (v) => v.canCopyDiff(), (v) => v.copyDiff()),
+	});
+
+	plugin.addCommand({
+		id: 'copy-all-changes',
+		name: 'Copy all changes as diff',
+		checkCallback: (checking) => onActiveView(checking, (v) => v.canCopyAllChanges(), (v) => v.copyAllChanges()),
+	});
 }

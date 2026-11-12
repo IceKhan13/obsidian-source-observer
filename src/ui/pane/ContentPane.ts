@@ -1,23 +1,19 @@
 import { Component, Notice, setIcon } from 'obsidian';
-import * as path from 'path';
 import type { BlameCommit } from '../../git/blame';
 import type { GitRepo } from '../../git/GitRepo';
 import type { FileCommit } from '../../git/history';
 import type { ChangeEntry, ChangeGroup } from '../../git/status';
-import { loadCommitSides, loadDiffSides } from '../../git/diffSources';
-import { formatBytes, LoadedContent, readViewableFile } from '../../utils/content';
+import type { AgentCitation } from '../../links/agentFormat';
 import { LatestRequest } from '../../utils/latest';
 import { copyToClipboard } from '../../utils/system';
+import { formatPatch, Hunk, patchHunks } from '../../utils/patch';
 import { formatDateTime } from '../../utils/time';
 import type { LineRange } from '../../links/sourceLink';
 import type { DiffLayout } from '../../settings';
+import { loadPlan, PaneTarget, Plan } from './plan';
 import { CodeRenderer, DiffRenderer, EditorSelectionInfo, MessageRenderer, PaneRenderer } from './renderers';
 
-export type PaneTarget =
-	| { type: 'file'; absPath: string; label: string; lines: LineRange | null }
-	| { type: 'diff'; repo: GitRepo; entry: ChangeEntry; label: string }
-	/** A file's change in one commit; `absPath` is the file in the working tree. */
-	| { type: 'commit'; repo: GitRepo; commit: FileCommit; absPath: string; label: string };
+export type { PaneTarget } from './plan';
 
 interface PaneAction {
 	icon: string;
@@ -34,7 +30,7 @@ export interface ContentPaneOptions {
 	diffLayout?: DiffLayout;
 	/** Called when the user switches the diff layout from the header. */
 	onDiffLayoutChange?: (layout: DiffLayout) => void;
-	/** Shows the copy-link menu for the open file; the header button is hidden without it. */
+	/** Shows the copy menu for the open file or diff; the header button is hidden without it. */
 	onLinkMenu?: (evt: MouseEvent) => void;
 	/** The repository of the opened folder, used for blame and history. */
 	getRepo?: () => GitRepo | null;
@@ -50,30 +46,6 @@ const GROUP_LABEL: Record<ChangeGroup, string> = {
 	conflicts: 'conflict',
 	base: 'against base',
 };
-
-/** What to render once a target's data has loaded. */
-type Plan =
-	| { kind: 'code'; text: string; fileName: string; repo: GitRepo | null; repoPath: string | null }
-	| { kind: 'diff'; original: string; modified: string; fileName: string; worktreePath: string | null }
-	| { kind: 'message'; icon: string; text: string; detail?: string };
-
-/** Turns a non-text load result into a message, or returns null for text/missing. */
-function contentProblem(content: LoadedContent, what: string): Plan | null {
-	switch (content.kind) {
-		case 'binary':
-			return { kind: 'message', icon: 'file-x', text: `Binary ${what}`, detail: formatBytes(content.size) };
-		case 'too-large':
-			return { kind: 'message', icon: 'file-warning', text: `${what} is too large to display`, detail: formatBytes(content.size) };
-		case 'error':
-			return { kind: 'message', icon: 'alert-triangle', text: `Cannot read ${what}`, detail: content.message };
-		default:
-			return null;
-	}
-}
-
-function textOf(content: LoadedContent): string {
-	return content.kind === 'text' ? content.text : '';
-}
 
 /**
  * Owns the right-hand pane: a header (path, stats, actions) and exactly one
@@ -91,6 +63,8 @@ export class ContentPane extends Component {
 	private target: PaneTarget | null = null;
 	/** Loaded data for `target`, kept so a layout change can re-render without reloading. */
 	private plan: Plan | null = null;
+	/** Hunks of the diff on screen, for copying changes. */
+	private hunks: Hunk[] = [];
 	private latest = new LatestRequest();
 	/** Identity of what is currently rendered, used to skip no-op reloads. */
 	private signature = '';
@@ -140,6 +114,41 @@ export class ContentPane extends Component {
 		if (this.target?.type !== 'file' || !(this.current instanceof CodeRenderer)) return null;
 		const selection = this.current.selection();
 		return selection ? { absPath: this.target.absPath, selection } : null;
+	}
+
+	/**
+	 * The selected lines of the shown file or diff side (all of it when
+	 * nothing is selected), cited for a coding agent.
+	 */
+	agentCitation(): { citation: AgentCitation; text: string } | null {
+		const plan = this.plan;
+		if (plan?.kind === 'code' && this.target?.type === 'file' && this.current instanceof CodeRenderer) {
+			const selection = this.current.selection();
+			if (!selection) return null;
+			const citePath = plan.repoPath ?? this.target.absPath;
+			return { citation: { path: citePath, lines: selection.lines, revision: null }, text: selection.text };
+		}
+		if (plan?.kind === 'diff' && this.current instanceof DiffRenderer) {
+			const selection = this.current.selection();
+			const citePath = selection?.side === 'a' ? plan.paths.oldPath : plan.paths.newPath;
+			if (!selection || !citePath) return null;
+			const revision = plan.revisions[selection.side];
+			return { citation: { path: citePath, lines: selection.lines, revision }, text: selection.text };
+		}
+		return null;
+	}
+
+	/** The shown diff as a unified diff, or just hunk `index` of it; null when no diff is shown. */
+	diffPatch(index?: number): string | null {
+		const plan = this.plan;
+		if (plan?.kind !== 'diff') return null;
+		const hunks = index === undefined ? this.hunks : this.hunks.slice(index, index + 1);
+		return plan.preamble + formatPatch(plan.paths, hunks);
+	}
+
+	/** Repository-relative path of the shown diff's file, for messages. */
+	diffPath(): string | null {
+		return this.plan?.kind === 'diff' ? this.plan.paths.newPath ?? this.plan.paths.oldPath : null;
 	}
 
 	showDiff(repo: GitRepo, entry: ChangeEntry, label: string) {
@@ -231,51 +240,13 @@ export class ContentPane extends Component {
 		if (!keepScroll) this.headerEl.addClass('so-pane-loading');
 		let plan: Plan;
 		try {
-			plan = await this.loadPlan(target);
+			plan = await loadPlan(target, () => this.opts.getRepo?.() ?? null);
 		} catch (err) {
 			plan = { kind: 'message', icon: 'alert-triangle', text: 'Failed to load', detail: String(err) };
 		}
 		if (!this.latest.isCurrent(token)) return;
 		this.headerEl.removeClass('so-pane-loading');
 		this.render(target, plan, keepScroll);
-	}
-
-	private async loadPlan(target: PaneTarget): Promise<Plan> {
-		if (target.type === 'file') {
-			const fileName = path.basename(target.absPath);
-			const content = await readViewableFile(target.absPath);
-			if (content.kind === 'missing') return { kind: 'message', icon: 'file-question', text: 'File not found' };
-			const repo = this.opts.getRepo?.() ?? null;
-			const repoPath = repo?.repoPath(target.absPath) ?? null;
-			return contentProblem(content, 'file') ?? { kind: 'code', text: textOf(content), fileName, repo, repoPath };
-		}
-
-		if (target.type === 'commit') {
-			const { repo, commit } = target;
-			const { original, modified } = await loadCommitSides(repo, commit);
-			const problem = contentProblem(original, 'file') ?? contentProblem(modified, 'file');
-			if (problem) return problem;
-			const before = textOf(original);
-			const after = textOf(modified);
-			if (before === after) {
-				const detail = commit.origPath ? `Renamed from ${commit.origPath}` : 'The file content did not change in this commit';
-				return { kind: 'message', icon: 'check', text: 'No textual changes', detail };
-			}
-			return { kind: 'diff', original: before, modified: after, fileName: path.basename(commit.path), worktreePath: target.absPath };
-		}
-
-		const { repo, entry } = target;
-		const fileName = path.basename(entry.file.path);
-		const { original, modified } = await loadDiffSides(repo, entry);
-		const problem = contentProblem(original, 'file') ?? contentProblem(modified, 'file');
-		if (problem) return problem;
-		const before = textOf(original);
-		const after = textOf(modified);
-		if (before === after) {
-			return { kind: 'message', icon: 'check', text: 'No textual changes', detail: 'Both versions have identical content' };
-		}
-		const worktreePath = entry.group !== 'staged' && modified.kind === 'text' ? repo.absPath(entry.file.path) : null;
-		return { kind: 'diff', original: before, modified: after, fileName, worktreePath };
 	}
 
 	private render(target: PaneTarget, plan: Plan, keepScroll: boolean) {
@@ -321,10 +292,15 @@ export class ContentPane extends Component {
 
 		if (plan.kind === 'diff') {
 			const layout = this.diffLayout;
-			const diff = new DiffRenderer(this.bodyEl, this.fontSize, plan.original, plan.modified, plan.fileName, layout, this.wordWrap);
+			this.hunks = patchHunks(plan.original, plan.modified);
+			const buttons = { anchors: this.hunks.map((h) => h.anchor), onCopy: (i: number) => this.copyHunk(i) };
+			const diff = new DiffRenderer(this.bodyEl, this.fontSize, plan.original, plan.modified, plan.fileName, layout, this.wordWrap, buttons);
 			this.mount(diff);
 			const next: DiffLayout = layout === 'split' ? 'unified' : 'split';
-			const actions: PaneAction[] = [
+			const actions: PaneAction[] = [];
+			const onLinkMenu = this.opts.onLinkMenu;
+			if (onLinkMenu) actions.push({ icon: 'link', label: 'Copy', run: onLinkMenu });
+			actions.push(
 				{
 					icon: next === 'split' ? 'columns-2' : 'rows-2',
 					label: next === 'split' ? 'Show side by side' : 'Show unified',
@@ -334,7 +310,7 @@ export class ContentPane extends Component {
 					},
 				},
 				find,
-			];
+			);
 			if (target.type === 'commit') {
 				const { hash, short } = target.commit;
 				actions.push({
@@ -361,6 +337,12 @@ export class ContentPane extends Component {
 
 		this.setHeader(label, null, []);
 		this.mount(new MessageRenderer(this.bodyEl, plan.icon, plan.text, plan.detail));
+	}
+
+	/** Copies hunk `index` of the shown diff, from its button in the gutter. */
+	private copyHunk(index: number) {
+		const patch = this.diffPatch(index);
+		if (patch) void copyToClipboard(patch, `Copied change in ${this.diffPath() ?? 'file'}`);
 	}
 
 	/**

@@ -48,6 +48,7 @@ src/
   settings.ts                 settings model, defaults, validation
   links/
     sourceLink.ts             link, embed and code block formats; embed parsing
+    agentFormat.ts            references and code for coding agents (`src/a.ts:10-20`)
     register.ts               obsidian:// handler and code block processor
   git/
     GitRepo.ts                resolves root/git dir/prefix; runs git with --no-optional-locks
@@ -63,15 +64,18 @@ src/
     FileIndex.ts              cached file list for search (git ls-files or a bounded walk)
     ContentSearch.ts          search in files: git grep, or reading indexed files; match previews
     Worktrees.ts              worktree summaries (changes, ahead/behind) and folder mapping
+    ChangesPatch.ts           unified diffs of listed changes, with size limits; changed file lists
   ui/
     SourceObserverView.ts     layout and wiring
     sidebar/                  Files, Search, Changes and History sections, tree, keyboard navigation
-    pane/                     content pane and its renderers (code, diff, message)
-    editor/                   CodeMirror theme, languages, diff stats, blame gutter
+    pane/                     content pane, what each target loads, and its renderers (code, diff, message)
+    editor/                   CodeMirror theme, languages, diff stats, blame and copy-change gutters
     embed/                    live code embeds rendered inside notes
     fileMenu.ts               right-click menu for files, folders and changes
+    agentCopy.ts              menu items that copy references, diffs and file lists for agents
     worktreeMenu.ts           the worktree switcher menu
-  utils/                      file reading, icons, paths, request tokens, OS integration
+  utils/                      file reading, icons, paths, request tokens, OS integration,
+                              line diffs and unified diff formatting
 ```
 
 A few principles hold the design together:

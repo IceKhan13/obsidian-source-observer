@@ -1,8 +1,9 @@
-import { debounce, ItemView, Menu, Notice, Scope, setIcon, WorkspaceLeaf } from 'obsidian';
+import { debounce, ItemView, Notice, Scope, setIcon, WorkspaceLeaf } from 'obsidian';
 import * as path from 'path';
 import type SourceObserverPlugin from '../main';
 import { addRecentFolder, clamp, DEFAULT_SETTINGS, setBaseBranch, SIDEBAR_WIDTH_RANGE } from '../settings';
 import { ChangeEntry, ChangeKind, primaryKind } from '../git/status';
+import { AGENT_FORMATS, AgentFormat, agentReference, formatForAgent } from '../links/agentFormat';
 import { COPY_FORMATS, CopyFormat, describeLocation, formatForCopy, LineRange, SourceLocation } from '../links/sourceLink';
 import { compareWithBase } from '../services/BaseComparison';
 import { RepoSnapshot, RepoState } from '../services/RepoState';
@@ -11,7 +12,8 @@ import { equivalentFolder, loadWorktreeSummaries } from '../services/Worktrees';
 import { LatestRequest } from '../utils/latest';
 import { isDirectory, isFile, normalizeFolderInput } from '../utils/paths';
 import { copyToClipboard } from '../utils/system';
-import { FileMenuItem, showFileMenu } from './fileMenu';
+import { changeDiffItem, changesCopyItems, copyAllChanges, searchReferenceItems } from './agentCopy';
+import { FileMenuItem, showFileMenu, showMenuGroups } from './fileMenu';
 import { showBaseMenu } from './baseMenu';
 import { promptForFolder, showFolderMenu } from './folderPicker';
 import { showWorktreeMenu } from './worktreeMenu';
@@ -28,10 +30,12 @@ const PANE_RELOAD_DEBOUNCE_MS = 250;
 /** Sidebar width change per arrow-key press on the resize handle, in px. */
 const RESIZE_KEY_STEP = 16;
 
-const COPIED_NOTICE: Record<CopyFormat, string> = {
+const COPIED_NOTICE: Record<CopyFormat | AgentFormat, string> = {
 	link: 'Copied link to',
 	embed: 'Copied embed of',
 	code: 'Copied code block from',
+	reference: 'Copied reference to',
+	snippet: 'Copied code from',
 };
 
 /**
@@ -113,8 +117,10 @@ export class SourceObserverView extends ItemView {
 				this.files.select(absPath);
 				void this.pane.showFile(absPath, rel, { from: line, to: line });
 			},
-			onContextMenu: (evt, absPath, relPath) => {
-				showFileMenu(evt, { absPath, relPath, isDir: false, exists: true }, [this.fileLinkItems(absPath)]);
+			onContextMenu: (evt, absPath, relPath, lines) => {
+				const all = this.search.resultLines().map((r) => ({ path: this.agentPath(path.join(this.folder, r.rel)), line: r.line }));
+				const references = searchReferenceItems(this.agentPath(absPath), lines, all);
+				showFileMenu(evt, { absPath, relPath, isDir: false, exists: true }, [this.fileLinkItems(absPath), references]);
 			},
 		}));
 		this.changes = this.addChild(new ChangesSection(sidebar, {
@@ -128,6 +134,11 @@ export class SourceObserverView extends ItemView {
 			onBranchClick: (anchor) => { void this.showWorktrees(anchor); },
 			onToggleBase: () => this.toggleBaseComparison(),
 			onBaseClick: (anchor) => { void this.chooseBase(anchor); },
+			onCopyMenu: (evt) => {
+				const listed = this.changes.listed();
+				if (this.state.snapshot.kind !== 'repo' || !listed) return;
+				showMenuGroups(evt, changesCopyItems(this.state.snapshot.repo, this.state.snapshot.status, listed));
+			},
 		}));
 		this.history = this.addChild(new HistorySection(sidebar, {
 			onOpenCommit: (repo, commit, absPath, label) => { void this.pane.showCommit(repo, commit, absPath, label); },
@@ -349,6 +360,42 @@ export class SourceObserverView extends ItemView {
 		void copyToClipboard(formatForCopy(format, loc, file.selection.text), `${COPIED_NOTICE[format]} ${describeLocation(loc)}`);
 	}
 
+	/** True when a file or diff is shown, so code from it can be copied for an agent. */
+	canCopyForAgent(): boolean {
+		return this.pane.hasEditor();
+	}
+
+	/** Copies a reference to the selected lines, or the lines themselves, for a coding agent. */
+	copyForAgent(format: AgentFormat) {
+		const cited = this.pane.agentCitation();
+		if (!cited) return;
+		const text = formatForAgent(format, cited.citation, cited.text);
+		void copyToClipboard(text, `${COPIED_NOTICE[format]} ${agentReference(cited.citation)}`);
+	}
+
+	/** True when a diff is shown, so it can be copied. */
+	canCopyDiff(): boolean {
+		return this.pane.diffPath() !== null;
+	}
+
+	/** Copies the shown diff as a unified diff. */
+	copyDiff() {
+		const patch = this.pane.diffPatch();
+		if (patch) void copyToClipboard(patch, `Copied diff of ${this.pane.diffPath() ?? 'file'}`);
+	}
+
+	/** True when the changes list can be copied: a repository, and no comparison in progress. */
+	canCopyAllChanges(): boolean {
+		return this.state.snapshot.kind === 'repo' && !!this.changes.listed();
+	}
+
+	/** Copies every listed change as one diff. */
+	copyAllChanges() {
+		const listed = this.changes.listed();
+		if (this.state.snapshot.kind !== 'repo' || !listed) return;
+		copyAllChanges(this.state.snapshot.repo, this.state.snapshot.status, listed);
+	}
+
 	/** Opens a file from a link or embed, switching to its folder first if needed. */
 	async openLocation(loc: SourceLocation) {
 		const folder = normalizeFolderInput(loc.folder);
@@ -392,13 +439,17 @@ export class SourceObserverView extends ItemView {
 		const relPath = repo.toFolderRelative(entry.file.path);
 		const absPath = repo.absPath(entry.file.path);
 		const exists = entry.kind !== 'deleted';
-		const extra = exists
-			? [
-				[{ title: 'Open file', icon: 'file-text', run: () => { void this.pane.showFile(absPath, relPath); } }],
-				this.fileLinkItems(absPath),
-			]
+		const open: FileMenuItem[] = exists
+			? [{ title: 'Open file', icon: 'file-text', run: () => { void this.pane.showFile(absPath, relPath); } }]
 			: [];
+		const extra = [[...open, changeDiffItem(repo, entry)], exists ? this.fileLinkItems(absPath) : []];
 		showFileMenu(evt, { absPath, relPath, isDir: false, exists }, extra);
+	}
+
+	/** How an agent at the repository root refers to `absPath`: repository-relative, or absolute outside a repository. */
+	private agentPath(absPath: string): string {
+		const repo = this.state.snapshot.kind === 'repo' ? this.state.snapshot.repo : null;
+		return repo?.repoPath(absPath) ?? absPath;
 	}
 
 	/** A location in the opened folder, with a '/'-separated relative path. */
@@ -416,13 +467,18 @@ export class SourceObserverView extends ItemView {
 		}));
 	}
 
-	/** The header's link button: copy the shown file or selection in each format. */
+	/**
+	 * The header's copy button: for a file, references for agents and links
+	 * for notes; for a diff, the diff and references to the selected lines.
+	 */
 	private showLinkMenu(evt: MouseEvent) {
-		const menu = new Menu();
-		for (const { format, title, icon } of COPY_FORMATS) {
-			menu.addItem((item) => item.setTitle(title).setIcon(icon).onClick(() => this.copyFromEditor(format)));
+		const agent = AGENT_FORMATS.map(({ format, title, icon }) => ({ title, icon, run: () => this.copyForAgent(format) }));
+		if (this.canCopyDiff()) {
+			showMenuGroups(evt, [[{ title: 'Copy diff', icon: 'file-diff', run: () => this.copyDiff() }, ...agent]]);
+			return;
 		}
-		menu.showAtMouseEvent(evt);
+		const notes = COPY_FORMATS.map(({ format, title, icon }) => ({ title, icon, run: () => this.copyFromEditor(format) }));
+		showMenuGroups(evt, [agent, notes]);
 	}
 
 	private refreshAll() {

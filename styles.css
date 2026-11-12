@@ -576,3 +576,16 @@
 	font-size: var(--font-ui-small);
 }
 .so-embed-error { color: var(--text-error); }
+
+/* Copy buttons for the changes in a diff */
+.so-hunk-gutter .cm-gutterElement { padding: 0 2px; }
+.so-hunk-copy {
+	display: flex;
+	align-items: center;
+	height: 100%;
+	color: var(--text-faint);
+	cursor: pointer;
+}
+.so-hunk-copy:empty { width: 14px; cursor: default; }
+.so-hunk-copy svg { width: 14px; height: 14px; }
+.so-hunk-copy:hover { color: var(--text-normal); }

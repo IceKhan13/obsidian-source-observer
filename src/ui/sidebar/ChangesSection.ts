@@ -23,6 +23,14 @@ export interface ChangesSectionOptions {
 	onToggleBase?: () => void;
 	/** Selecting the base line, to choose another base branch. */
 	onBaseClick?: (anchor: HTMLElement) => void;
+	/** Shows the menu for copying the changes; no button without it. */
+	onCopyMenu?: (evt: MouseEvent) => void;
+}
+
+/** The changes listed, for copying: uncommitted ones, or those against a base branch. */
+export interface ListedChanges {
+	entries: ChangeEntry[];
+	base: { ref: string; commit: string } | null;
 }
 
 /** What the section shows in base mode: a comparison, or one being computed. */
@@ -73,6 +81,18 @@ export class ChangesSection extends Component {
 				onToggleBase();
 			});
 			this.baseToggle = toggle;
+		}
+		const onCopyMenu = opts.onCopyMenu;
+		if (onCopyMenu) {
+			const copyBtn = headerRight.createEl('button', {
+				cls: 'clickable-icon so-icon-btn so-changes-copy',
+				attr: { 'aria-label': 'Copy changes', 'aria-haspopup': 'menu' },
+			});
+			setIcon(copyBtn, 'clipboard-copy');
+			this.registerDomEvent(copyBtn, 'click', (e) => {
+				e.stopPropagation();
+				onCopyMenu(e);
+			});
 		}
 		const refreshBtn = headerRight.createEl('button', {
 			cls: 'clickable-icon so-icon-btn',
@@ -126,6 +146,17 @@ export class ChangesSection extends Component {
 	/** The branch line, used to position the worktree menu; null while it is hidden. */
 	branchAnchor(): HTMLElement | null {
 		return this.branchEl.isShown() ? this.branchEl : null;
+	}
+
+	/**
+	 * The changes in the list, ignoring the filter; null when there is no
+	 * repository or the base comparison is still running or failed.
+	 */
+	listed(): ListedChanges | null {
+		if (this.snapshot.kind !== 'repo') return null;
+		const base = this.base;
+		if (!base) return { entries: groupChanges(this.snapshot.status.files), base: null };
+		return base.kind === 'ok' ? { entries: base.entries, base: { ref: base.ref, commit: base.commit } } : null;
 	}
 
 	/** Shows how many worktrees the repository has next to the branch name. */

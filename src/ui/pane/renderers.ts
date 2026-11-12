@@ -10,6 +10,7 @@ import type { DiffLayout } from '../../settings';
 import { blameGutter } from '../editor/blameGutter';
 import { diffStats, DiffStats } from '../editor/diffStats';
 import { languageFor } from '../editor/languages';
+import { hunkCopyGutter } from '../editor/hunkGutter';
 import { diffTheme, fontTheme, obsidianHighlight, obsidianTheme } from '../editor/theme';
 
 /**
@@ -106,6 +107,19 @@ export interface EditorSelectionInfo {
 	text: string;
 }
 
+/** The selected whole lines of `view`, or the whole document when the selection is empty. */
+function lineSelection(view: EditorView): EditorSelectionInfo {
+	const { doc } = view.state;
+	const { from, to, empty } = view.state.selection.main;
+	if (empty) return { lines: null, text: doc.toString() };
+	const first = doc.lineAt(from);
+	// A selection ending at the start of a line (e.g. a dragged or triple-click
+	// selection) does not include that line.
+	let last = doc.lineAt(to);
+	if (to === last.from && to > from) last = doc.lineAt(to - 1);
+	return { lines: { from: first.number, to: last.number }, text: doc.sliceString(first.from, last.to) };
+}
+
 /**
  * Read-only, syntax-highlighted file view. The CodeMirror instance is reused
  * across files; language, font size, linked-line highlights and the blame
@@ -198,17 +212,7 @@ export class CodeRenderer extends PaneRenderer {
 
 	/** The selected whole lines, or the whole file when the selection is empty. */
 	selection(): EditorSelectionInfo | null {
-		const view = this.view;
-		if (!view) return null;
-		const { doc } = view.state;
-		const { from, to, empty } = view.state.selection.main;
-		if (empty) return { lines: null, text: doc.toString() };
-		const first = doc.lineAt(from);
-		// A selection ending at the start of a line (e.g. a dragged or triple-click
-		// selection) does not include that line.
-		let last = doc.lineAt(to);
-		if (to === last.from && to > from) last = doc.lineAt(to - 1);
-		return { lines: { from: first.number, to: last.number }, text: doc.sliceString(first.from, last.to) };
+		return this.view ? lineSelection(this.view) : null;
 	}
 
 	setFontSize(fontSize: number) {
@@ -222,6 +226,13 @@ export class CodeRenderer extends PaneRenderer {
 		this.wordWrap = wordWrap;
 		this.view?.dispatch({ effects: this.wrap.reconfigure(wrapExtension(wordWrap)) });
 	}
+}
+
+/** Copy buttons for the hunks of a diff, shown on the new side. */
+export interface HunkButtons {
+	/** 1-based line in the new document for each hunk's button. */
+	anchors: number[];
+	onCopy: (index: number) => void;
 }
 
 /**
@@ -245,6 +256,7 @@ export class DiffRenderer extends PaneRenderer {
 		private fileName: string,
 		readonly layout: DiffLayout,
 		private wordWrap = false,
+		private hunks: HunkButtons | null = null,
 	) {
 		super(parent, `so-diff-view so-diff-${layout}`);
 	}
@@ -258,12 +270,13 @@ export class DiffRenderer extends PaneRenderer {
 			diffTheme,
 		];
 		const collapseUnchanged = { margin: 3, minSize: 6 };
+		const hunkButtons = this.hunks ? hunkCopyGutter(this.hunks.anchors, this.hunks.onCopy) : [];
 
 		if (this.layout === 'split') {
 			this.split = new MergeView({
 				parent: this.el,
 				a: { doc: this.original, extensions },
-				b: { doc: this.modified, extensions },
+				b: { doc: this.modified, extensions: [...extensions, hunkButtons] },
 				highlightChanges: true,
 				gutter: true,
 				collapseUnchanged,
@@ -279,6 +292,7 @@ export class DiffRenderer extends PaneRenderer {
 				doc: this.modified,
 				extensions: [
 					...extensions,
+					hunkButtons,
 					unifiedMergeView({
 						original: this.original,
 						mergeControls: false,
@@ -303,6 +317,16 @@ export class DiffRenderer extends PaneRenderer {
 	editor() {
 		if (this.split) return this.split[this.focusedSide];
 		return this.unified;
+	}
+
+	/**
+	 * The selected lines and which side they are on: in the split layout, the
+	 * side that last had focus; in the unified layout, always the new side.
+	 */
+	selection(): (EditorSelectionInfo & { side: 'a' | 'b' }) | null {
+		const view = this.editor();
+		if (!view) return null;
+		return { side: this.split ? this.focusedSide : 'b', ...lineSelection(view) };
 	}
 
 	/** Number of added and removed lines across all changed chunks. */

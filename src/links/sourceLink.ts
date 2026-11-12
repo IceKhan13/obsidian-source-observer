@@ -56,7 +56,7 @@ export function markdownLink(loc: SourceLocation): string {
 }
 
 /** A fence longer than any run of backticks in `text`, so the text cannot close it. */
-function fenceFor(text: string): string {
+export function fenceFor(text: string): string {
 	const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length));
 	return '`'.repeat(Math.max(3, longest + 1));
 }
